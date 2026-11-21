@@ -77,7 +77,7 @@ return view.extend({
 		}, _('只重建规则（不下载）'));
 
 		var actionCard = pb.card(_('立即操作'), [
-			E('p', { 'style': 'margin:0 0 .6em;font-size:92%;color:var(--text-color-medium,#666)' },
+			E('p', { 'style': 'margin:0 0 .6em;font-size:92%;color:var(--pb-muted)' },
 				_('「只重建」用上一次缓存的 CN 列表重新算补集，适合改过白名单或想强制刷新规则时用，') +
 				_('不依赖上游能不能连上。')),
 			E('div', {}, [ btnUpdate, btnRebuild ])
@@ -125,7 +125,7 @@ return view.extend({
 		rows.push([ _('定时更新'),
 			st.cron && st.cron.installed
 				? E('code', {}, st.cron.line)
-				: E('span', { 'style': 'color:#d97706' }, _('未安装（列表不会自动更新）')) ]);
+				: E('span', { 'class': 'pb-warn' }, _('未安装（列表不会自动更新）')) ]);
 
 		rows.push([ _('最近一次更新'),
 			last
@@ -138,7 +138,7 @@ return view.extend({
 		body.textContent = '';
 
 		if (!st || st.ok === false) {
-			body.appendChild(E('div', { 'style': 'color:#dc2626' },
+			body.appendChild(E('div', { 'class': 'pb-err' },
 				_('读不到状态：%s').format((st && st.error) || _('status.sh 没有返回'))));
 			return;
 		}
@@ -163,12 +163,12 @@ return view.extend({
 		body.textContent = '';
 
 		if (!list.length) {
-			body.appendChild(E('div', { 'style': 'color:var(--text-color-medium,#666)' },
+			body.appendChild(E('div', { 'style': 'color:var(--pb-muted)' },
 				_('还没有备份。每次成功重建规则时会把上一版 include 存下来，最多留 5 份。')));
 			return;
 		}
 
-		body.appendChild(E('p', { 'style': 'margin:0 0 .5em;font-size:92%;color:var(--text-color-medium,#666)' },
+		body.appendChild(E('p', { 'style': 'margin:0 0 .5em;font-size:92%;color:var(--pb-muted)' },
 			_('回滚只换 include 文件并 reload fw4，不动配置。第 1 份是最新的。')));
 
 		var tb = E('table', { 'class': 'table' });

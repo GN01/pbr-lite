@@ -29,26 +29,40 @@ var callStatus = rpc.declare({ object: 'pbr-lite', method: 'status' });
 //   3. 卡片/徽章/内联 code 各写各的内联样式，深浅色主题下不统一。
 // 现在结构只负责 class，长什么样集中在这里改。
 var CSS = [
+	'/* ---- 主题适配层：不猜变量名，只用主题确实定义过的那几个（QWRT design 主题）----',
+	'   --sectionbg_color: 浅 #fff / 暗 #1c1c1e（主题自己的 .cbi-section 就用它）',
+	'   --cbiline_color:   本身就是完整的 "1px solid <色>" 简写',
+	'   缺了就退回中性半透明，深浅色下都成立，绝不再 fallback 到 #fff ---- */',
+	'.pbrlite{',
+	'  --pb-card-bg:var(--sectionbg_color,rgba(127,127,127,.06));',
+	'  --pb-line:var(--cbiline_color,1px solid rgba(127,127,127,.14));',
+	'  --pb-muted:rgba(0,0,0,.52)}',
+	'@media (prefers-color-scheme:dark){',
+	'  .pbrlite{--pb-muted:rgba(255,255,255,.60)}}',
 	'/* ---- 卡片：pb.card() 与 form.Map 的分节共用同一套外观 ---- */',
 	'.pbrlite .pb-card,',
 	'.pbrlite .cbi-map>.cbi-section:not(.pb-card){',
-	'  position:relative;background:var(--background-color-high,#fff);',
+	'  position:relative;background:var(--pb-card-bg);',
 	'  border:1px solid rgba(127,127,127,.16);border-radius:8px;',
 	'  padding:16px 18px;margin:0 0 14px;box-shadow:0 1px 2px rgba(0,0,0,.03)}',
+	'/* 投影在深色底上没有意义，反而像脏边 */',
+	'@media (prefers-color-scheme:dark){',
+	'  .pbrlite .pb-card,',
+	'  .pbrlite .cbi-map>.cbi-section:not(.pb-card){box-shadow:none}}',
 	'.pbrlite .pb-card>h3,',
 	'.pbrlite .cbi-map>.cbi-section:not(.pb-card)>h3{',
 	'  margin:0 0 12px;padding:0 0 10px;',
 	'  font-size:14px;font-weight:600;line-height:1.4;text-transform:none;',
-	'  color:inherit;border-bottom:1px solid rgba(127,127,127,.14)}',
+	'  color:inherit;border-bottom:var(--pb-line)}',
 	'/* 卡片工具（如「刷新」）：浮在标题行右端，不占流，避免标题与内容之间出现空白 */',
 	'.pbrlite .pb-card-tool{position:absolute;top:12px;right:16px;z-index:1}',
 	'/* 分节描述：和标题拉开一点，别贴着表单 */',
 	'.pbrlite .cbi-section-descr{margin:0 0 12px;font-size:12.5px;',
-	'  color:var(--text-color-medium,#666);line-height:1.7}',
+	'  color:var(--pb-muted);line-height:1.7}',
 	'/* ---- 表单行：标签列与键值表对齐 ---- */',
 	'.pbrlite .cbi-value{padding:7px 0;align-items:flex-start}',
 	'.pbrlite .cbi-value-title{width:190px;min-width:150px;padding-top:6px;',
-	'  font-size:13px;color:var(--text-color-medium,#666);font-weight:400;flex:none}',
+	'  font-size:13px;color:var(--pb-muted);font-weight:400;flex:none}',
 	'.pbrlite .cbi-value-field{font-size:13px}',
 	'@media (max-width:640px){',
 	'  .pbrlite .cbi-value-title{width:auto;display:block;padding-bottom:2px}}',
@@ -58,18 +72,42 @@ var CSS = [
 	'  border-bottom:1px solid rgba(127,127,127,.08);font-size:13px;line-height:1.65}',
 	'.pbrlite table.pb-kv tr:last-child td{border-bottom:0}',
 	'.pbrlite table.pb-kv td.pb-k{width:190px;min-width:150px;padding-right:16px;',
-	'  color:var(--text-color-medium,#666)}',
+	'  color:var(--pb-muted)}',
 	'@media (max-width:640px){',
 	'  .pbrlite table.pb-kv td{display:block;width:auto !important;border-bottom:0;padding:2px 0}',
 	'  .pbrlite table.pb-kv tr{display:block;padding:6px 0;border-bottom:1px solid rgba(127,127,127,.08)}}',
-	'/* ---- 徽章：浅底 + 语义色文字，比实心胶囊克制 ---- */',
+	'/* ---- 徽章：语义色由 --pb-c 传入（JS 只写变量，不写死颜色），',
+	'   这样暗色下能用 color-mix 统一提亮，不必为每个语义色维护两套值 ---- */',
 	'.pbrlite .pb-badge{display:inline-block;padding:1px 8px;border-radius:999px;',
-	'  font-size:11px;font-weight:500;line-height:1.7;white-space:nowrap;vertical-align:baseline}',
+	'  font-size:11px;font-weight:500;line-height:1.7;white-space:nowrap;vertical-align:baseline;',
+	'  color:var(--pb-c,#3b82f6);background:rgba(127,127,127,.10);',
+	'  border:1px solid rgba(127,127,127,.22)}',
 	'/* ---- 顶部状态条：左侧色条 + 圆点，替代实心横幅 ---- */',
 	'.pbrlite .pb-banner{display:flex;align-items:center;gap:10px;',
 	'  padding:11px 14px;margin:0 0 14px;border:1px solid rgba(127,127,127,.16);',
-	'  border-left:3px solid transparent;border-radius:8px;font-size:13px;line-height:1.6}',
-	'.pbrlite .pb-dot{width:7px;height:7px;border-radius:50%;flex:none}',
+	'  border-left:3px solid var(--pb-c,#607d8b);border-radius:8px;',
+	'  font-size:13px;line-height:1.6;background:rgba(127,127,127,.05)}',
+	'.pbrlite .pb-dot{width:7px;height:7px;border-radius:50%;flex:none;',
+	'  background:var(--pb-c,#607d8b)}',
+	'/* 支持 color-mix 时用语义色做真正的浅底；暗色下把色相往白里混，',
+	'   否则 #2e7d32 这种深绿落在 #1c1c1e 上几乎看不见 ---- */',
+	'@supports (color:color-mix(in srgb,red 50%,white)){',
+	'  .pbrlite .pb-badge{',
+	'    background:color-mix(in srgb,var(--pb-c,#3b82f6) 12%,transparent);',
+	'    border-color:color-mix(in srgb,var(--pb-c,#3b82f6) 30%,transparent)}',
+	'  .pbrlite .pb-banner{',
+	'    background:color-mix(in srgb,var(--pb-c,#607d8b) 7%,transparent);',
+	'    border-color:color-mix(in srgb,var(--pb-c,#607d8b) 22%,transparent)}',
+	'  @media (prefers-color-scheme:dark){',
+	'    .pbrlite .pb-badge{',
+	'      color:color-mix(in srgb,var(--pb-c,#3b82f6) 55%,#fff);',
+	'      background:color-mix(in srgb,var(--pb-c,#3b82f6) 20%,transparent);',
+	'      border-color:color-mix(in srgb,var(--pb-c,#3b82f6) 42%,transparent)}',
+	'    .pbrlite .pb-banner{',
+	'      background:color-mix(in srgb,var(--pb-c,#607d8b) 15%,transparent);',
+	'      border-color:color-mix(in srgb,var(--pb-c,#607d8b) 28%,transparent);',
+	'      border-left-color:color-mix(in srgb,var(--pb-c,#607d8b) 55%,#fff)}',
+	'    .pbrlite .pb-dot{background:color-mix(in srgb,var(--pb-c,#607d8b) 60%,#fff)}}}',
 	'/* ---- 内联 code ---- */',
 	'.pbrlite code{font-family:var(--font-mono,ui-monospace,Menlo,Consolas,monospace);',
 	'  font-size:12px;font-style:normal;background:rgba(127,127,127,.09);',
@@ -78,7 +116,7 @@ var CSS = [
 	'/* ---- 按钮：只收拾本 app 自己的按钮，主题控件（动态列表的红×/蓝+）不动 ---- */',
 	'.pbrlite .pb-ghost{background:transparent !important;',
 	'  border:1px solid rgba(127,127,127,.28) !important;',
-	'  color:var(--text-color-medium,#666) !important;box-shadow:none !important;',
+	'  color:var(--pb-muted) !important;box-shadow:none !important;',
 	'  font-size:12px !important;padding:1px 10px !important}',
 	'/* ---- 自检：告警块与折叠组 ---- */',
 	'.pbrlite .pb-warnbox{background:rgba(239,108,0,.06);',
@@ -91,7 +129,16 @@ var CSS = [
 	'.pbrlite details ul{margin:6px 0 2px;padding-left:18px}',
 	'.pbrlite details li{padding:2px 0;font-size:12px;line-height:1.6}',
 	'/* ---- 杂项 ---- */',
-	'.pbrlite .pb-muted{color:var(--text-color-medium,#666)}',
+	'.pbrlite .pb-muted{color:var(--pb-muted)}',
+	'/* 语义文字色：浅色用深色值；暗色必须提亮 —— #dc2626 落在 #1c1c1e 上约 3.4:1，',
+	'   读起来费劲，换成 #ff8a80 有 7.6:1。所以状态文字一律走这三个类，不写内联色 ---- */',
+	'.pbrlite .pb-ok{color:#2e7d32}',
+	'.pbrlite .pb-warn{color:#b45309}',
+	'.pbrlite .pb-err{color:#c62828}',
+	'@media (prefers-color-scheme:dark){',
+	'  .pbrlite .pb-ok{color:#81c995}',
+	'  .pbrlite .pb-warn{color:#ffb74d}',
+	'  .pbrlite .pb-err{color:#ff8a80}}',
 	'.pbrlite .pb-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}'
 ].join('\n');
 
@@ -107,18 +154,6 @@ function ensureStyle() {
 }
 
 ensureStyle();
-
-// #rrggbb + 透明度 → rgba()。徽章/横幅的浅底色都从这里出，保证深浅主题都能看。
-function hexA(hex, a) {
-	var m = /^#?([0-9a-fA-F]{6})$/.exec(hex || '');
-
-	if (!m)
-		return 'rgba(127,127,127,' + a + ')';
-
-	var n = parseInt(m[1], 16);
-
-	return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
-}
 
 // 配置项 → 导出变量 → 影响哪一层。
 //   include = 要重新生成 nft include（7~12 秒，含 fw4 reload）
@@ -183,13 +218,14 @@ function kv(rows) {
 	return tb;
 }
 
+// 语义色只以 --pb-c 的形式交给 CSS，不在这里拼 rgba。
+// 原因：拼成内联 style 就写死了，暗色主题下没法统一提亮（#2e7d32 的深绿
+// 落在 #1c1c1e 上几乎看不见），而 CSS 里能按 prefers-color-scheme 用
+// color-mix 把色相往白里混。浅色下不吃 color-mix 也有中性灰底兜着。
 function tag(text, color) {
-	color = color || '#3b82f6';
-
 	return E('span', {
 		'class': 'pb-badge',
-		'style': 'background:' + hexA(color, .12) + ';color:' + color +
-		         ';border:1px solid ' + hexA(color, .28)
+		'style': '--pb-c:' + (color || '#3b82f6')
 	}, text);
 }
 
@@ -197,13 +233,12 @@ function tag(text, color) {
 // 用「左侧色条 + 圆点 + 浅底」表达状态，不再用 alert-message 的实心大色块。
 function banner(kind, text) {
 	var COLORS = { ok: '#2e7d32', warn: '#ef6c00', err: '#c62828', idle: '#607d8b' };
-	var c = COLORS[kind] || COLORS.idle;
 
 	return E('div', {
 		'class': 'pb-banner',
-		'style': 'border-left-color:' + c + ';background:' + hexA(c, .07)
+		'style': '--pb-c:' + (COLORS[kind] || COLORS.idle)
 	}, [
-		E('span', { 'class': 'pb-dot', 'style': 'background:' + c }),
+		E('span', { 'class': 'pb-dot' }),
 		E('span', {}, text)
 	]);
 }
@@ -512,7 +547,7 @@ function jobPanel() {
 				var hd = E('div', {}, [ E('strong', {}, '任务 '), ' ', stateTag(job) ]);
 				while (head.firstChild)
 					head.removeChild(head.firstChild);
-				dom.append(head, [ hd, E('div', { 'style': 'margin-top:.3em;color:var(--text-color-medium,#666)' },
+				dom.append(head, [ hd, E('div', { 'style': 'margin-top:.3em;color:var(--pb-muted)' },
 					'正在启动后台任务…') ]);
 				setLog('');
 				return;
@@ -526,23 +561,23 @@ function jobPanel() {
 			var line = [ E('strong', {}, title + ' '), ' ', stateTag(job) ];
 
 			if (job.step && (job.starting || job.state == 'running'))
-				line.push(' ', E('span', { 'style': 'color:var(--text-color-medium,#666)' },
+				line.push(' ', E('span', { 'style': 'color:var(--pb-muted)' },
 					'· ' + job.step + '…'));
 
 			if (job.elapsed)
-				line.push(' ', E('span', { 'style': 'color:var(--text-color-medium,#666)' },
+				line.push(' ', E('span', { 'style': 'color:var(--pb-muted)' },
 					'· 已用 ' + fmtDur(job.elapsed)));
 
 			if (job.result)
 				line.push(E('div', { 'style': 'margin-top:.3em' }, job.result));
 
 			if (job.state == 'failed')
-				line.push(E('div', { 'style': 'margin-top:.35em;color:#dc2626;font-size:92%' },
+				line.push(E('div', { 'style': 'margin-top:.35em;font-size:92%', 'class': 'pb-err' },
 					'失败时配置已自动退回上一份。表单里显示的还是你刚才填的值，' +
 					'刷新页面即可看到当前真正的配置。'));
 
 			if (job.stale)
-				line.push(E('div', { 'style': 'margin-top:.3em;color:#d97706' },
+				line.push(E('div', { 'style': 'margin-top:.3em', 'class': 'pb-warn' },
 					'任务超过 5 分钟仍显示执行中，可能已经卡住（看下面的日志和系统日志）'));
 
 			while (head.firstChild)
@@ -608,7 +643,7 @@ function overlay(title, bodyNodes, buttons) {
 	var panel = document.createElement('div');
 
 	panel.style.cssText =
-		'background:var(--background-color-high,#fff);color:var(--text-color,#111);' +
+		'background:var(--sectionbg_color,#fff);color:inherit;' +
 		'max-width:560px;width:94%;max-height:86vh;overflow:auto;border-radius:8px;' +
 		'box-shadow:0 10px 40px rgba(0,0,0,.35);padding:1.1em 1.3em;text-align:left';
 
@@ -662,7 +697,7 @@ function confirmTyped(msg) {
 		input.placeholder = 'CONFIRM';
 		input.style.cssText = 'width:100%;margin-top:.6em;box-sizing:border-box;padding:.35em .5em';
 
-		var hint = E('p', { 'style': 'margin:.5em 0 0;font-size:90%;color:#b45309' },
+		var hint = E('p', { 'style': 'margin:.5em 0 0;font-size:90%', 'class': 'pb-warn' },
 			'确认无误请在下面输入 CONFIRM（全大写）再点「确认应用」。');
 
 		overlay('危险操作确认', [ E('p', { 'style': 'margin:0;line-height:1.6' }, msg), input, hint ], [
@@ -842,7 +877,7 @@ function settingsPage(opts) {
 				var kids = [];
 
 				if (!changed.length) {
-					kids.push(E('span', { 'style': 'color:#16a34a' },
+					kids.push(E('span', { 'class': 'pb-ok' },
 						_('表单值与当前生效值一致，无需应用')));
 				}
 				else {
@@ -853,12 +888,12 @@ function settingsPage(opts) {
 						changed.map(function(f) { return f.label; }).join(_('、'))));
 
 					if (r.include) {
-						kids.push(E('div', { 'style': 'margin-top:.4em;font-size:92%;color:var(--text-color-medium,#666)' },
+						kids.push(E('div', { 'style': 'margin-top:.4em;font-size:92%;color:var(--pb-muted)' },
 							_('重建时会用上一次缓存的 CN 列表，不会再下载一遍（除非你改了列表地址）。')));
 					}
 
 					if (r.rule && !r.include) {
-						kids.push(E('div', { 'style': 'margin-top:.4em;font-size:92%;color:var(--text-color-medium,#666)' },
+						kids.push(E('div', { 'style': 'margin-top:.4em;font-size:92%;color:var(--pb-muted)' },
 							_('路由表重装是幂等的：先删旧 ip rule 再装新的，中间不 flush 表，') +
 							_('打标流量不会掉回主表。')));
 					}

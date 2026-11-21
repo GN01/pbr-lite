@@ -152,7 +152,7 @@ return view.extend(pb.settingsPage({
 		if (!macEl || !devEl || !hopEl)
 			return;
 
-		var msg = E('span', { 'style': 'font-size:92%;color:var(--text-color-medium,#666)' });
+		var msg = E('span', { 'style': 'font-size:92%;color:var(--pb-muted)' });
 		var btn = E('button', {
 			'type': 'button',
 			'class': 'btn cbi-button',

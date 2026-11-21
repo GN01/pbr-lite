@@ -408,7 +408,7 @@ return view.extend({
 		]);
 
 		if (s.ok === true)
-			head.appendChild(E('span', { 'style': 'margin-left:10px;color:#2e7d32' },
+			head.appendChild(E('span', { 'style': 'margin-left:10px', 'class': 'pb-ok' },
 				_('全部通过')));
 
 		var problems = items.filter(function(it) {
@@ -422,7 +422,7 @@ return view.extend({
 
 			for (var j = 0; j < problems.length && j < 30; j++) {
 				list.appendChild(E('li', {
-					'style': problems[j].status == 'fail' ? 'color:#c62828' : 'color:#ef6c00'
+					'class': problems[j].status == 'fail' ? 'pb-err' : 'pb-warn'
 				}, '[%s] %s'.format(problems[j].group || '', problems[j].msg)));
 			}
 
@@ -442,8 +442,8 @@ return view.extend({
 				E('ul', {},
 					list2.map(function(x) {
 						return E('li', {
-							'style': x.status == 'pass' ? 'color:#2e7d32' :
-							         (x.status == 'warn' ? 'color:#ef6c00' : 'color:#c62828')
+							'class': x.status == 'pass' ? 'pb-ok' :
+							         (x.status == 'warn' ? 'pb-warn' : 'pb-err')
 						}, x.msg);
 					}))
 			]);

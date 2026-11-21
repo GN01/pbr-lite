@@ -296,14 +296,37 @@ m.children.forEach(function(sec) {
 `.pb-banner`（顶部状态条）。`form.Map` 渲染出来的分节也被同一套选择器接管
 （`.cbi-map > .cbi-section:not(.pb-card)`），所以「表单页」和「只读页」看起来是一个风格。
 
-主题覆盖踩到的四处（都是实测，改之前先看这里）：
+主题覆盖踩到的五处（都是实测，改之前先看这里）：
 
 | 现象 | 原因 | 处理 |
 |---|---|---|
+| **暗色主题下卡片整个变白、字看不见** | 用了 LuCI 官方主题的变量名 `--background-color-high` / `--text-color-medium`，而 QWRT 的 design 主题根本没定义它们；`var()` 取不到就 fallback 到写死的 `#fff` / `#666` | 只用主题确实定义过的 `--sectionbg_color`（浅 `#fff` / 暗 `#1c1c1e`）与 `--cbiline_color`，缺了就退中性 `rgba(127,127,127,.06)` |
 | 值列莫名右对齐 | 主题 `.table` 给单元格设了 `text-align:right` | `.pbrlite table.pb-kv td` 显式 `left` |
 | 「nft 对象」显示成「Nft 对象」 | 主题给 `h3` 加了 `text-transform:capitalize` | 标题显式 `text-transform:none` |
 | 「源地址」标签垂直居中在一长列输入框中间 | `.cbi-value` 是 `flex; align-items:center` | 改 `flex-start` + label 加 `padding-top` |
 | 顶部状态条太吵 | 用 `alert-message success`，那是一整条实心绿 | 换成 `.pb-banner`：浅底 + 左侧色条 + 圆点 |
+
+**别猜主题的变量名。** 这是上面第一条的根因，也是这类问题最坏的地方：`var(--x, #fff)` 的
+fallback 会让错误**静默生效** —— 浅色主题下看着完全正常，只有用户切到暗色才炸。查法：
+
+```sh
+ssh root@192.168.0.1 'grep -oE "^\s*--[a-zA-Z0-9_-]+:[^;]+" \
+    /www/luci-static/<主题>/css/style.css | sort -u'
+```
+
+正则必须带下划线和数字：QWRT 用的是 `--sectionbg_color`、`--badgebg_color` 这种下划线命名，
+写成 `[a-z-]` 会一条都匹配不到，于是误判成「主题没有变量」，正好走上 fallback 那条路。
+另外注意同名变量会出现两次（`@media (prefers-color-scheme: dark)` 里重定义），
+浅色 `#fff` 配暗色 `#1c1c1e` 那种成对出现才是正常的。
+
+**写死的语义色在暗色下也会失效。** `#dc2626` 落在 `#1c1c1e` 上只有 3.4:1，`#2e7d32` 更差，
+正文能读但费劲。所以：
+
+- 徽章 / 状态条只从 JS 传一个 `--pb-c` 变量（`'style': '--pb-c:' + color`），颜色由 CSS 决定，
+  暗色下用 `color-mix(in srgb, var(--pb-c) 55%, #fff)` 把色相往白里混（对比度 7~10:1）。
+  `color-mix` 外面套一层 `@supports`，不支持的浏览器退回中性灰底 + 原色文字。
+- 正文里的状态文字一律走 `.pb-ok` / `.pb-warn` / `.pb-err` 三个类，**不写内联 `color:`**。
+  内联样式写死了，CSS 再想按主题改就得 `!important`，越描越黑。
 
 **不要动主题的自绘控件。** 动态列表（`DynamicList`）的红色 × 是 `.item::after` 伪元素、
 蓝色 + 是 `.cbi-button-add`，它们和 DHCP 静态租约等系统页面是同一个样式。
