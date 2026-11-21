@@ -1,0 +1,69 @@
+# /etc/config/pbr-lite -- PBR Lite 的全部配置
+#
+# 改完不会自动生效，要跑一次：
+#   /etc/init.d/pbr-lite restart        # 只影响 ip rule / 路由表
+#   pbr-lite-update                     # 重新生成 nft 规则并装载
+#   pbr-lite-update --dry-run           # 先预演，不落地
+#
+# 界面（luci-app-pbr-lite）会替你按「生效半径」调上面这两条，手改就自己记得。
+
+config pbrlite 'main'
+	option enabled '1'
+
+# ---------------------------------------------------------------- 分流来源
+# 哪些源地址需要「非 CN 就走旁路由」。可以写单地址，也可以写 CIDR。
+# 没列在这里的机器完全不受影响（不会被送进旁路由）。
+config lan 'lan'
+	list src_addr '192.168.0.2'
+
+# ---------------------------------------------------------------- 旁路由
+config dae 'dae'
+	# 旁路由网卡的 MAC。循环兜底靠它识别「旁路由把包原样转回来」。
+	# 换网卡必须改这里并重跑 pbr-lite-update，否则兜底失效。
+	# 核对：ip neigh show 192.168.0.253
+	option mac 'a4:ae:12:77:5d:de'
+	# 旁路由地址（打标流量的下一跳）
+	option next_hop '192.168.0.253'
+	# 旁路由在哪个接口上（同 LAN 直连）
+	option lan_dev 'br-lan'
+
+# ---------------------------------------------------------------- 打标
+# mark 值与「保留掩码」。ip rule 用的匹配掩码由保留掩码自动反推，不用单独配。
+# 改这里等于改整套约定，务必同时确认没有别的模块占用这一段。
+config mark 'mark'
+	option value '0x010000'
+	option keep_mask '0xff00ffff'
+
+# ---------------------------------------------------------------- 列表来源
+config source 'source'
+	option url 'https://ispip.clang.cn/all_cn.txt'
+	# 补集条目下限：低于这个数判为上游异常，放弃更新
+	option min_entries '5000'
+	# 条目漂移容忍度（百分比）：超过就要求 --force
+	option max_drift '40'
+
+# ---------------------------------------------------------------- 直连白名单
+# 这些目的地址永远不打标、直接走宽带。用于「公司 OA / 固定出口 IP 想直连」。
+# 只能加，不能用来删内置的内网/保留段（那些写在 exclude.txt 里，只读）。
+config direct 'direct'
+	# list dst '203.0.113.0/24'
+	# list dst '198.51.100.7'
+
+# ---------------------------------------------------------------- nft 对象
+# 一般不用改。改集合名会让旧集合残留在内核里，需要手工 nft delete set。
+config nft 'nft'
+	option set_src 'pbrlite_src'
+	option set_dst 'pbrlite_notcn'
+	option include '/usr/share/nftables.d/ruleset-post/30-pbr-lite.nft'
+
+# ---------------------------------------------------------------- 路由层
+config route 'route'
+	option table_id '250'
+	option table_name 'pbrlite'
+	option pref '28000'
+
+# ---------------------------------------------------------------- 兜底
+# 关掉后：旁路由挂掉时，本该被代理的包会在路由器与旁路由之间来回转发到 TTL 耗尽。
+# 除非在排障，否则别关。
+config guard 'guard'
+	option enabled '1'

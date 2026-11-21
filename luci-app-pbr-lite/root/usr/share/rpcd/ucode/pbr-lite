@@ -1,0 +1,541 @@
+'use strict';
+
+// /usr/share/rpcd/ucode/pbr-lite
+//
+// ubus 对象 `pbr-lite` 的实现。rpcd 会把本文件 return 的对象的 key 注册成 ubus 对象。
+//
+// 设计边界（很重要）：
+//   * 这里只做「校验参数 + 调固定脚本 + 把输出转成 JSON」，不实现任何分流业务逻辑。
+//     分流逻辑全部在 shell 侧（/usr/share/pbr-lite/*.sh），因为它们可以脱离
+//     LuCI 单独跑、单独测、单独升级。
+//   * **不提供通用 exec 方法**。所有能执行的东西都是写死的绝对路径。
+//   * 长任务不在请求里同步跑：只写配置、起 job、立刻返回，前端轮询 job_status。
+//     同步跑 10 秒会撞 rc 超时，界面也会僵住。
+//
+// 值的合法性由两层把关：
+//   1. 这里按 SPEC 白名单校验格式（不认识的名字一律拒绝，不做「尽力而为」）
+//   2. job.sh 做语义交叉校验（mark 与掩码会不会互相抵消、集合名冲突等）
+//   格式错立刻返回给用户；语义错由 job 回滚并报告。
+
+import { popen, readfile, writefile, access, mkdir } from 'fs';
+import { cursor } from 'uci';
+
+const SHARE  = '/usr/share/pbr-lite';
+const STATE  = SHARE + '/state.json';
+const CONF   = '/var/run/pbr-lite.conf';
+const CONFIG = '/etc/config/pbr-lite';
+const RUNDIR = '/var/run/pbr-lite';
+const PREV   = RUNDIR + '/config.prev';
+const LOGF   = RUNDIR + '/job.log';
+
+// ---------------------------------------------------------------- 通用
+function run(cmd) {
+	let fd = popen(cmd);
+
+	if (!fd)
+		return null;
+
+	let out = fd.read('all');
+	fd.close();
+
+	return out;
+}
+
+function run_json(cmd) {
+	let s = run(cmd);
+
+	if (!s)
+		return null;
+
+	try {
+		let r = json(s);
+		return (type(r) == 'object') ? r : null;
+	}
+	catch (e) {
+		return null;
+	}
+}
+
+// ---------------------------------------------------------------- 校验
+const V4   = /^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/;
+const NET  = /^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\/[0-9]{1,2}$/;
+const MAC  = /^[0-9a-fA-F]{2}(:[0-9a-fA-F]{2}){5}$/;
+const HEX  = /^0x[0-9a-fA-F]{1,8}$/;
+const ID   = /^[a-zA-Z0-9_]{1,32}$/;
+const IF   = /^[a-zA-Z0-9_.:@-]{1,15}$/;
+// 路由表名会被写进 /etc/iproute2/rt_tables 再被 ip rule 引用。数字开头（尤其纯数字）
+// 会被 ip 当成表号直接解析、绕过名字映射，所以这里比集合名更严：必须字母或下划线开头。
+const RNAME = /^[a-zA-Z_][a-zA-Z0-9_]{0,31}$/;
+// 注意：ucode 的正则量词上限是 255，写 {4,300} 会直接抛 "Invalid contents of {}"，
+// 而且是加载期语法错误 —— 整个插件连一条方法都注册不上，ubus list 里啥都看不到。
+//
+// 第二个坑（踩过）：字符类里用反斜杠转义方括号（形如 \[\ ]），ucode 不报错，
+// 但整个字符类直接变成永不匹配 —— 表现为「明明是对的 URL 却报格式错」。
+// 正确写法是把 ] 放在 [ 后面第一位，[ 直接裸写：
+//     []A-Za-z0-9...   ← 可以；   [A-Za-z0-9\[\]]   ← 静默失效
+const URL  = /^https?:\/\/[]A-Za-z0-9._~:\/?#[@!$&'()*+,;=%-]{4,255}$/;
+// include 路径必须落在 fw4 的 ruleset-post 目录下：那里面的 *.nft 会被 fw4 整目录装载，
+// 指到别处等于写了一个永远不会被加载的文件。
+const NFT  = /^\/usr\/share\/nftables\.d\/ruleset-post\/[A-Za-z0-9_.-]{1,80}\.nft$/;
+
+// 配置项白名单。key = <uci section>.<option>
+const SPEC = {
+	'main.enabled':       { kind: 'bool',  label: '启用分流' },
+	'guard.enabled':      { kind: 'bool',  label: '循环兜底' },
+	'lan.src_addr':       { kind: 'addr',  label: '生效地址' },
+	'direct.dst':         { kind: 'addr',  label: '直连白名单' },
+	'dae.mac':            { kind: 'mac',   label: '旁路由 MAC' },
+	'dae.next_hop':       { kind: 'ip',    label: '旁路由地址' },
+	'dae.lan_dev':        { kind: 'if',    label: 'LAN 接口' },
+	'mark.value':         { kind: 'hex',   label: '打标值' },
+	'mark.keep_mask':     { kind: 'hex',   label: '保留掩码' },
+	'source.url':         { kind: 'url',   label: '列表地址' },
+	'source.min_entries': { kind: 'int',   label: '条目下限', min: 100,   max: 1000000 },
+	'source.max_drift':   { kind: 'int',   label: '漂移阈值', min: 1,     max: 100 },
+	'nft.set_src':        { kind: 'ident', label: '源集合名' },
+	'nft.set_dst':        { kind: 'ident', label: '目标集合名' },
+	'nft.include':        { kind: 'nft',   label: 'include 路径' },
+	'route.table_id':     { kind: 'int',   label: '路由表号', min: 1,     max: 252 },
+	'route.table_name':   { kind: 'rname', label: '路由表名' },
+	'route.pref':         { kind: 'int',   label: '规则优先级', min: 1,   max: 32765 }
+};
+
+function v4(s) {
+	let p = split(`${s}`, '.');
+
+	if (length(p) != 4)
+		return false;
+
+	for (let i = 0; i < 4; i++) {
+		if (!match(p[i], /^[0-9]{1,3}$/))
+			return false;
+		if (+p[i] > 255)
+			return false;
+	}
+
+	return true;
+}
+
+function net(s) {
+	let p = split(`${s}`, '/');
+
+	if (length(p) != 2 || !v4(p[0]) || !match(p[1], /^[0-9]{1,2}$/))
+		return false;
+
+	return (+p[1] <= 32);
+}
+
+// 前端可能给数组（list），也可能给单个字符串
+function as_list(v) {
+	if (type(v) == 'array')
+		return v;
+
+	if (type(v) == 'string')
+		return (length(v) ? [ v ] : []);
+
+	return null;
+}
+
+function validate(vals) {
+	let n = 0;
+
+	for (let k, v in vals) {
+		let spec = SPEC[k];
+
+		if (!spec)
+			return `不认识的配置项：${k}`;
+
+		n++;
+
+		switch (spec.kind) {
+		case 'bool':
+			if (`${v}` !== '0' && `${v}` !== '1')
+				return `${spec.label}只能是 0 或 1`;
+			break;
+
+		case 'ip':
+			if (!v4(v))
+				return `${spec.label}不是合法 IPv4 地址`;
+			break;
+
+		case 'addr': {
+			let arr = as_list(v);
+
+			if (arr == null)
+				return `${spec.label}必须是列表`;
+
+			if (length(arr) > 256)
+				return `${spec.label}最多 256 条`;
+
+			for (let i = 0; i < length(arr); i++) {
+				let e = `${arr[i]}`;
+
+				if (!v4(e) && !net(e))
+					return `${spec.label}第 ${i + 1} 项「${e}」不是 IPv4 或 CIDR`;
+			}
+			break;
+		}
+
+		case 'mac':
+			if (!match(v, MAC))
+				return `${spec.label}格式应为 aa:bb:cc:dd:ee:ff`;
+			break;
+
+		case 'if':
+			if (!match(v, IF))
+				return `${spec.label}不是合法的网络接口名`;
+			break;
+
+		case 'hex':
+			if (!match(v, HEX))
+				return `${spec.label}必须是 0x 开头的十六进制（最多 8 位）`;
+			break;
+
+		case 'url':
+			if (!match(v, URL))
+				return `${spec.label}必须是 http(s):// 开头的地址`;
+			break;
+
+		case 'ident':
+			if (!match(v, ID))
+				return `${spec.label}只能包含字母、数字、下划线（≤32）`;
+			break;
+
+		case 'rname':
+			if (!match(v, RNAME))
+				return `${spec.label}必须以字母或下划线开头，且只含字母、数字、下划线（≤32）`;
+			break;
+
+		case 'nft':
+			if (!match(v, NFT))
+				return `${spec.label}必须落在 /usr/share/nftables.d/ruleset-post/ 下且以 .nft 结尾`;
+			break;
+
+		case 'int': {
+			if (!match(`${v}`, /^[0-9]{1,7}$/))
+				return `${spec.label}必须是整数`;
+
+			let i = +v;
+
+			if (i < spec.min || i > spec.max)
+				return `${spec.label}应在 ${spec.min} ~ ${spec.max} 之间`;
+			break;
+		}
+		}
+	}
+
+	if (!n)
+		return '没有要保存的配置项';
+
+	return null;
+}
+
+// ---------------------------------------------------------------- 写 UCI
+function apply_to_uci(vals) {
+	let u = cursor();
+
+	u.load('pbr-lite');
+
+	for (let k, v in vals) {
+		let p = split(k, '.');
+		let sect = p[0], opt = p[1];
+
+		if (SPEC[k].kind == 'addr') {
+			let arr = as_list(v);
+			let clean = [];
+
+			// uci 的 list 没有「替换」语义，只能先删再写，否则旧条目会留一半
+			u.delete('pbr-lite', sect, opt);
+
+			for (let i = 0; i < length(arr); i++)
+				push(clean, `${arr[i]}`);
+
+			if (length(clean))
+				u.set('pbr-lite', sect, opt, clean);
+		}
+		else {
+			u.set('pbr-lite', sect, opt, `${v}`);
+		}
+	}
+
+	if (!u.commit('pbr-lite')) {
+		// delta 留在 /tmp/.uci 里会被下一次任意 commit 带上去，必须撤掉
+		run('uci -q revert pbr-lite');
+		return false;
+	}
+
+	return true;
+}
+
+// ---------------------------------------------------------------- 任务状态
+function jget(name) {
+	let p = `${RUNDIR}/job.${name}`;
+
+	return access(p) ? trim(readfile(p) ?? '') : '';
+}
+
+function job_state() {
+	let state = jget('state');
+	let started = +(jget('started') || 0);
+	let ended = +(jget('ended') || 0);
+
+	// pending 只认「刚写下的」：它是 apply_config/update 起任务前放的占位标记，
+	// 正常情况下毫秒级就被 job.sh 摘掉。留超过 30 秒说明那个 job 根本没起来
+	// （脚本被删、权限没了…），算 stale 而不是当成任务在跑，否则界面会一直
+	// 「执行中」，还挡住了下一次保存。
+	let pended = access(`${RUNDIR}/job.pending`);
+	let pending_age = pended ? (time() - (+(readfile(`${RUNDIR}/job.pending`) || 0))) : 0;
+	let pending = (pended && pending_age >= 0 && pending_age < 30) ? true : false;
+	let starting = (pending && state != 'running') ? true : false;
+
+	let r = {
+		id:      jget('id'),
+		kind:    jget('kind'),
+		state:   state,
+		step:    jget('step'),
+		result:  jget('result'),
+		started: started,
+		ended:   ended,
+		elapsed: (state == 'running') ? (time() - started) : (ended > started ? ended - started : 0),
+		starting: starting ? true : false,
+		active:  false,
+		stale:   false,
+		log:     ''
+	};
+
+	r.active = (r.starting || state == 'running') ? true : false;
+	r.stale  = (r.active && r.elapsed > 300) ? true : false;
+
+	if (access(LOGF)) {
+		let t = readfile(LOGF) ?? '';
+
+		if (length(t) > 8192)
+			t = substr(t, length(t) - 8192);
+
+		r.log = t;
+	}
+
+	return r;
+}
+
+// 起一个后台任务。job.sh 自己会抢 flock 单例；这里先写 pending 标记，
+// 让前端能区分「还没起来」和「起来了」，不用靠猜 job id 有没有变。
+function launch(argv) {
+	if (!access(RUNDIR))
+		mkdir(RUNDIR, 0755);
+
+	writefile(`${RUNDIR}/job.pending`, `${time()}`);
+
+	let fd = popen(`${SHARE}/job.sh ${argv} >/dev/null 2>&1 &`);
+
+	if (fd)
+		fd.close();
+}
+
+// ---------------------------------------------------------------- ubus 方法
+const methods = {
+	// 内核当下的真实状态 + 上一次更新的结果（state.json）+ 当前任务
+	status: {
+		call: function() {
+			let r = run_json(`${SHARE}/status.sh --json`);
+
+			if (type(r) != 'object')
+				return { ok: false, error: 'status.sh 执行失败或输出不是合法 JSON' };
+
+			r.state = null;
+
+			if (access(STATE)) {
+				try {
+					r.state = json(readfile(STATE));
+				}
+				catch (e) {
+					// state.json 坏掉不该让整个页面挂掉，降级成 null 由前端提示
+					r.state_error = `${e}`;
+				}
+			}
+
+			r.job = job_state();
+
+			return r;
+		}
+	},
+
+	// 自检。默认 --fast（跳过 3 秒兜底计数采样），完整模式传 fast=0
+	verify: {
+		args: { fast: 1 },
+		call: function(request) {
+			let fast = (request.args.fast == 0) ? '' : ' --fast';
+			let r = run_json(`${SHARE}/verify.sh --json${fast}`);
+
+			if (type(r) != 'object') {
+				return {
+					summary: { pass: 0, warn: 0, fail: 1, total: 1, ok: false },
+					items: [ { status: 'fail', group: '0. 执行',
+					           msg: 'verify.sh 没有返回合法 JSON' } ]
+				};
+			}
+
+			return r;
+		}
+	},
+
+	// 诊断信息：include 头部、两条规则原文、日志尾巴、环境
+	// 采集逻辑全在 diag.sh 里（界面只是它的一个视图，脱开 LuCI 也能用）
+	diag: {
+		call: function() {
+			let r = run_json(`${SHARE}/diag.sh --json`);
+
+			if (type(r) != 'object')
+				return { ok: false, error: 'diag.sh 没有返回合法 JSON' };
+
+			return r;
+		}
+	},
+
+	// 诊断包：一整份纯文本，前端拼成文件让用户下载。
+	// verify 一并跑掉（1s 左右），这样贴出去的包里自带自检结论。
+	diag_bundle: {
+		call: function() {
+			let t = run(`${SHARE}/diag.sh --bundle`);
+
+			if (!t || !length(t))
+				return { ok: false, error: 'diag.sh --bundle 没有输出' };
+
+			// ubus 消息不是用来传大文件的：超过 200KB 直接截断
+			if (length(t) > 200000)
+				t = substr(t, 0, 200000) + '\n\n…（超过 200KB，已截断）\n';
+
+			let now = localtime();
+			let name = sprintf('pbr-lite-diag-%04d%02d%02d-%02d%02d.txt',
+				now.year, now.mon, now.mday, now.hour, now.min);
+
+			return { ok: true, name: name, text: t, bytes: length(t) };
+		}
+	},
+
+	// 探测旁路由的 MAC 与出口接口（「自动探测」按钮用）
+	detect_peer: {
+		args: { ip: '' },
+		call: function(request) {
+			let ip = `${request.args.ip ?? ''}`;
+
+			// 只放行标准点分 IPv4，避免任何形式的命令拼接
+			if (!match(ip, /^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/))
+				return { ok: false, error: '不是合法的 IPv4 地址' };
+
+			let r = run_json(`${SHARE}/peer-info.sh ${ip} --json`);
+
+			if (type(r) != 'object')
+				return { ok: false, error: '探测失败（peer-info.sh 没有返回 JSON）' };
+
+			return r;
+		}
+	},
+
+	// 单点归属查询：这个 IP 会被代理还是直连
+	lookup_ip: {
+		args: { ip: '' },
+		call: function(request) {
+			let ip = `${request.args.ip ?? ''}`;
+
+			// 只放行标准点分 IPv4，避免任何形式的命令拼接
+			if (!match(ip, /^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/))
+				return { ok: false, error: '不是合法的 IPv4 地址' };
+
+			let r = run_json(`${SHARE}/lookup-ip.sh ${ip} --json`);
+
+			if (type(r) != 'object')
+				return { ok: false, error: '查询失败（lookup-ip.sh 没有返回 JSON）' };
+
+			return r;
+		}
+	},
+
+	// 导出的 shell 变量，纯排障用
+	export_conf: {
+		call: function() {
+			if (!access(CONF))
+				return { ok: false, error: `${CONF} 不存在，先跑 conf-export.sh` };
+
+			return { ok: true, text: readfile(CONF) };
+		}
+	},
+
+	// 当前（或最近一次）任务的进度
+	job_status: {
+		call: function() {
+			return { ok: true, job: job_state() };
+		}
+	},
+
+	// 保存配置并应用。values 是 { "<section>.<option>": 值 } 的扁平字典。
+	apply_config: {
+		args: { values: {} },
+		call: function(request) {
+			let vals = request.args.values;
+
+			if (type(vals) != 'object')
+				return { ok: false, error: '参数格式不对' };
+
+			let err = validate(vals);
+
+			if (err)
+				return { ok: false, error: err };
+
+			let st = job_state();
+
+			if (st.active)
+				return { ok: false, error: '已有任务在执行，等它跑完再改' };
+
+			// 快照必须在写 UCI 之前：job 失败时就是靠它把整份配置退回去
+			let cur = access(CONFIG) ? readfile(CONFIG) : null;
+
+			if (cur)
+				writefile(PREV, cur);
+
+			if (!apply_to_uci(vals))
+				return { ok: false, error: '写入 UCI 失败（commit 没成功，已 revert）' };
+
+			launch('apply');
+
+			return { ok: true, job: job_state() };
+		}
+	},
+
+	// 手动刷新列表：no_fetch=1 表示不下载，用缓存的 CN 列表重建 include
+	update: {
+		args: { no_fetch: 0 },
+		call: function(request) {
+			let st = job_state();
+
+			if (st.active)
+				return { ok: false, error: '已有任务在执行' };
+
+			launch(request.args.no_fetch == 1 ? 'update --no-fetch' : 'update');
+
+			return { ok: true, job: job_state() };
+		}
+	},
+
+	// 回滚 include 到第 slot 新的备份（1 = 最新）
+	rollback: {
+		args: { slot: 1 },
+		call: function(request) {
+			let slot = +`${request.args.slot ?? 1}`;
+
+			if (!(slot >= 1 && slot <= 5))
+				return { ok: false, error: '备份序号只能是 1~5' };
+
+			let st = job_state();
+
+			if (st.active)
+				return { ok: false, error: '已有任务在执行' };
+
+			launch(`rollback ${slot}`);
+
+			return { ok: true, job: job_state() };
+		}
+	}
+};
+
+return { 'pbr-lite': methods };

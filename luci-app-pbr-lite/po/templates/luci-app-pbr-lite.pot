@@ -1,0 +1,909 @@
+# PBR Lite（LuCI 应用）界面文案模板
+# 由 `make` 的 luci i18n 流程读取；手工改动请同步 po/zh_Hans。
+#
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Project-Id-Version: luci-app-pbr-lite\n"
+"PO-Revision-Date: 2026-11-21 14:09+0800\n"
+"Last-Translator: gongweijin <gongweijin@banggood.com>\n"
+"Language-Team: PBR Lite\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: htdocs/luci-static/resources/pbr-lite/common.js:277
+#: htdocs/luci-static/resources/pbr-lite/common.js:297
+msgid "复制"
+msgstr ""
+
+#: htdocs/luci-static/resources/pbr-lite/common.js:287
+msgid "已复制"
+msgstr ""
+
+#: htdocs/luci-static/resources/pbr-lite/common.js:314
+msgid "复制日志"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:41
+msgid "读不到诊断信息：%s"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:41
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:114
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:213
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:144
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:207
+msgid "未知错误"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:45
+msgid "诊断"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:47
+msgid "这一页只读：所有内容都是现场读出来的，不会改配置、不会 reload。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:80
+msgid "查询"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:85
+msgid "输入一个公网地址，看它会走代理还是直连、命中哪条 CIDR、最终落到哪条路由。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:87
+msgid "单个地址归属"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:89
+msgid "判定顺序与数据面一致：直连白名单 → 内网保留段 → 非 CN 集合 → 其余按 CN 直连。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:102
+msgid "请填一个 IPv4 地址"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:107
+msgid "查询中…"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:114
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:136
+msgid "查询失败：%s"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:121
+msgid "结论"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:122
+msgid "说明"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:125
+msgid "命中 CIDR"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:127
+msgid "实际去向"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:129
+msgid "取不到（ip rule 或路由表可能没装）"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:143
+msgid "（include 还没生成）"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:145
+msgid "生成的 include"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:152
+msgid "  ⚠ 文件不存在"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:160
+msgid "（内核里没有引用集合的规则）"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:162
+msgid "内核规则原文"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:172
+msgid "（最近没有相关日志）"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:174
+msgid "系统日志"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:176
+msgid "最近 60 条含 pbr-lite / fw4 / nft 的日志。要更全的在 SSH 里用 logread。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:187
+msgid "诊断包"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:196
+msgid "下载诊断包"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:209
+msgid "正在收集…"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:213
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:227
+msgid "失败：%s"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/diagnostics.js:225
+msgid "已下载 %s（%s）"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:77
+msgid "%d 秒前"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:79
+msgid "%d 分钟前"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:81
+msgid "%d 小时前"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:83
+msgid "%d 天前"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:144
+msgid "无法读取状态：%s"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:155
+msgid "运行状态"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:156
+msgid "分流开关"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:158
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:179
+msgid "已启用"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:158
+msgid "已停用"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:160
+msgid "兜底：%s"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:160
+msgid "开"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:160
+msgid "关"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:162
+msgid "上次更新结果"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:163
+msgid "非中国地址条目"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:165
+msgid " 条，生成的 include 不会每天变"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:167
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:30
+msgid "规则源"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:168
+msgid "走代理的源地址"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:170
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:120
+msgid "旁路由"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:175
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:125
+msgid "定时更新"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:177
+msgid "未安装"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:178
+msgid "开机自启"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:180
+msgid "未启用"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:191
+msgid "数据一致性"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:192
+msgid "文件 vs 内核"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:195
+msgid "生成文件 "
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:197
+msgid " 条 / 内核 "
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:199
+msgid " 条"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:201
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:118
+msgid "include 文件"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:202
+msgid "存在"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:202
+msgid "不存在"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:204
+msgid "%d 行"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:206
+msgid "nft 集合"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:209
+msgid " 已装载"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:209
+msgid " 未装载"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:211
+msgid "规则引用"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:214
+msgid " 条（期望 ≥ 2：一条打标、一条循环兜底）"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:215
+msgid "正常"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:215
+msgid "异常"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:224
+msgid "计数与旁路由健康"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:225
+msgid "打标命中"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:227
+msgid "包 / %s"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:229
+msgid "循环兜底丢弃"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:231
+msgid "包"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:234
+msgid "旁路由邻居"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:235
+msgid "无 ARP 表项"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:238
+msgid "与配置一致"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:238
+msgid "与配置不一致"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:240
+msgid "路由层"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:243
+msgid "缺失（pref %s）"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:245
+msgid "表 %s："
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:253
+msgid "正在自检…（只读检查，不影响分流）"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:255
+msgid "自检"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:261
+msgid "重新自检"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:263
+msgid "共 9 组检查项；FAIL 会置顶显示"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:271
+msgid "本页只读。分流逻辑全部在 "
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:273
+msgid " 下的脚本里，脱离 LuCI 也能独立工作；界面只是它的一个视图。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:293
+msgid "PBR Lite 策略路由"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:295
+msgid "命中的源地址访问非中国 IP 时打标送旁路由，其余流量直连。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:310
+msgid "从未运行"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:323
+msgid "内容无变化，未重载"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:344
+msgid "分流已停用：规则没有下发，所有流量直连。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:347
+msgid "生成的 include 不存在：还没跑过更新，当前没有任何分流规则。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:350
+msgid "文件与内核不一致：内核 %s 条，文件 %s 条。规则可能没装载成功，点下方「重新自检」定位。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:354
+msgid "打标规则不完整（只有 %s 条引用集合）：循环兜底可能丢失。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:357
+msgid "运行中：%s 条非中国地址正在生效，命中后送 %s。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:391
+msgid "一致"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:391
+msgid "不一致"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:399
+msgid "（非零说明旁路由把包原样转回来了）"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:411
+msgid "其他"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:422
+msgid "通过 %d"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:423
+msgid "警告 %d"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:424
+msgid "失败 %d"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:424
+msgid "失败 0"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:429
+msgid "全部通过"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:447
+msgid "需要关注"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:481
+msgid "正在自检…（约 1~2 秒）"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/overview.js:486
+msgid "自检调用失败：%s"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:62
+msgid "分流设置"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:63
+msgid "改完点底部的「保存」。需要重建规则时会花 10 秒左右，期间页面会显示进度；"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:64
+msgid "失败会自动回滚到改动前的配置。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:70
+msgid "总开关"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:71
+msgid "关掉后 nft 里不再有引用地址集合的规则，所有流量按默认路由直连。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:72
+msgid "规则文件不会删，重新打开立刻生效（不用重新下载列表）。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:74
+msgid "启用分流"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:78
+msgid "循环兜底"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:79
+msgid "旁路由把包原样转回来时（策略不命中又被送回网关），"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:80
+msgid "这条规则会丢弃它，避免两边来回弹到 TTL 耗尽。看到「兜底」计数持续增长，"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:81
+msgid "通常说明旁路由那边的分流规则和这里对不上。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:83
+msgid "启用循环兜底"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:88
+msgid "生效地址"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:89
+msgid "只有源地址在下面列表里的设备才会被分流，其他设备一律直连。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:90
+msgid "填单个 IP。删空表示「谁都不分流」。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:92
+msgid "源地址"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:100
+msgid "请填单个 IPv4 地址（不带掩码）"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:104
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:123
+msgid "直连白名单"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:105
+msgid "这里的地址/网段即使不在中国列表里，也不会走旁路由（保持直连）。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:106
+msgid "典型用途：走旁路由会坏的国内 CDN、需要真实 IP 的内网服务。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:107
+msgid "改这里只需要重建规则，不用重新下载列表。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:109
+msgid "直连地址 / 网段"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:110
+msgid "1.2.3.4 或 10.0.0.0/8"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:116
+msgid "请填 IPv4 地址或 CIDR（例如 1.2.3.4/32）"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:121
+msgid "打标流量会被送到这台机器上做二次决策。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:122
+msgid "MAC 只用于「循环兜底」规则：它必须与旁路由网卡的真实 MAC 一致，"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:123
+msgid "换过网卡就要跟着改，自检里会核对。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:125
+msgid "旁路由地址"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:130
+msgid "请填 IPv4 地址"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:133
+msgid "旁路由 MAC"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:138
+msgid "格式应为 aa:bb:cc:dd:ee:ff"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:141
+msgid "LAN 接口"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:146
+msgid "不是合法的接口名"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:150
+msgid "打标值（危险）"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:151
+msgid "被分流的包会打上 mark，再由 ip rule 按 mark 送去路由表。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:152
+msgid "「保留掩码」里为 1 的位会被保留，为 0 的位被清空后写入打标值 —— "
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:153
+msgid "所以打标值不能占用保留掩码里的位，否则一打标就被自己抹掉。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:154
+msgid "默认 0x010000 / 0xff00ffff 是给 dae 用的约定值，除非你清楚在做什么，不要改。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:156
+msgid "打标值"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:161
+msgid "必须形如 0x010000"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:164
+msgid "保留掩码"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:169
+msgid "必须形如 0xff00ffff"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:173
+msgid "路由层（高级）"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:174
+msgid "打标流量按 ip rule 送进独立路由表，表里有一条指向旁路由的默认路由。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:175
+msgid "改这三项只会重装 ip rule 与路由表，1 秒内完成，不碰 nft。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:176
+msgid "优先级固定在 28000 附近是为了压过系统默认规则（32766/32767），"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:177
+msgid "又给 OpenVPN/mwan 之类留出空档。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:179
+msgid "路由表号"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:184
+msgid "路由表名"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:188
+msgid "只能字母数字下划线，≤15 字符"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:191
+msgid "规则优先级"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:197
+msgid "nft 对象（高级）"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:198
+msgid "集合名与 include 路径。改名后旧集合不会自动消失（fw4 reload 只复位链和规则，"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:199
+msgid "不清 set 对象），这里会在应用成功后顺手清掉旧名字，删不掉会在进度日志里说明。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:200
+msgid "include 必须落在 fw4 的 ruleset-post 目录里，那里面的 *.nft 才会被装载。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:202
+msgid "源集合名"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:206
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:213
+msgid "只能字母数字下划线，≤32 字符"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:209
+msgid "目标集合名"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:216
+msgid "include 路径"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:221
+msgid "必须在 /usr/share/nftables.d/ruleset-post/ 下且以 .nft 结尾"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:226
+msgid "保存后会发生什么"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:299
+msgid "表单值与当前生效值一致，无需应用"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:305
+msgid "改动项："
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:306
+msgid "、"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:310
+msgid "重建时会用上一次缓存的 CN 列表，不会再下载一遍（除非你改了列表地址）。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:315
+msgid "路由表重装是幂等的：先删旧 ip rule 再装新的，中间不 flush 表，"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:316
+msgid "打标流量不会掉回主表。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:334
+msgid "配置有问题"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:350
+msgid "你改动了打标值或保留掩码。这一步会同时改 nft 规则与 ip rule，"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:351
+msgid "改错的典型后果是「打标了但规则认不出」，流量会从主表出去。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/settings.js:352
+msgid "程序会先加一条临时规则顶住切换窗口，但请确认你算过掩码。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:31
+msgid "分流用的是「中国 IPv4 列表的补集」。列表每天定时拉一次，"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:32
+msgid "拉完会做条目下限、漂移、正反抽查三道校验，任何一道不过就保留旧数据。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:37
+msgid "列表来源"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:38
+msgid "默认源 https://ispip.clang.cn/all_cn.txt 每天更新，格式是一行一条 CIDR。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:39
+msgid "换源要求格式一致（一行一条 a.b.c.d/nn），否则会被「非法行过多」挡下来。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:41
+msgid "列表地址"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:49
+msgid "补集条目下限"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:53
+msgid "算出来的补集少于这个条数就判失败（防止上游给了半截数据还照装）。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:55
+msgid "漂移阈值（%）"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:59
+msgid "与上一次相比条目数变化超过这个百分比就停下等人工确认"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:60
+msgid "（确认无误可以用命令行 --force 跳过）。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:63
+msgid "当前状态"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:66
+msgid "备份与回滚"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:71
+msgid "立即更新（下载列表）"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:77
+msgid "只重建规则（不下载）"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:79
+msgid "立即操作"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:81
+msgid "「只重建」用上一次缓存的 CN 列表重新算补集，适合改过白名单或想强制刷新规则时用，"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:82
+msgid "不依赖上游能不能连上。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:112
+msgid "地址集合条目"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:113
+msgid "%s 条（文件 %s / 内核 %s）%s"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:116
+msgid "  ⚠ 不一致"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:120
+msgid "%s / %s 行"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:121
+msgid "不存在（还没生成过）"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:123
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:136
+msgid "%s 条"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:128
+msgid "未安装（列表不会自动更新）"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:130
+msgid "最近一次更新"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:132
+msgid "%s（%s，%ss）"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:133
+msgid "还没有记录"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:136
+msgid "state 记录"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:142
+msgid "读不到状态：%s"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:142
+msgid "status.sh 没有返回"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:151
+msgid "刷新"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:164
+msgid "还没有备份。每次成功重建规则时会把上一版 include 存下来，最多留 5 份。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:169
+msgid "回滚只换 include 文件并 reload fw4，不动配置。第 1 份是最新的。"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:174
+msgid "序号"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:175
+msgid "时间"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:176
+msgid "大小"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:182
+msgid "1（最新）"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:190
+msgid "回滚到这一版"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/pbr-lite/source.js:207
+msgid "启动失败"
+msgstr ""

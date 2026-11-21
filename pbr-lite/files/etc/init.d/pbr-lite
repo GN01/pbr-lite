@@ -1,0 +1,74 @@
+#!/bin/sh /etc/rc.common
+# /etc/init.d/pbr-lite -- 把「打标流量送旁路由」这一层路由装回去
+#
+# 它只做两件事，都不碰 nft：
+#   1. ip rule <pref>: fwmark <value>/<mask> -> 路由表 <table_id>
+#   2. 表 <table_id>: default via <next_hop> dev <lan_dev> + 主表直连路由副本
+#
+# 打标本身在 /usr/share/nftables.d/ruleset-post/30-pbr-lite.nft（由 fw4 装载）。
+# 两边的 mark 值只有一个来源：UCI 的 mark.value / mark.keep_mask，
+# 匹配掩码由保留掩码取反自动推出，不再手写第二份。
+#
+# START=99：必须晚于 netifd 给 br-lan 配地址、晚于 fw4 装载规则集。
+# 另外 /etc/hotplug.d/iface/99-pbr-lite 会在 lan 起来时再跑一次 start，防开局抢跑。
+
+START=99
+STOP=10
+
+CONF_EXPORT='/usr/share/pbr-lite/conf-export.sh'
+RUNTIME_CONF='/var/run/pbr-lite.conf'
+
+log() { logger -t pbr-lite-route "$*"; }
+
+load_conf() {
+	[ -x "$CONF_EXPORT" ] || { log "缺少 $CONF_EXPORT"; return 1; }
+	"$CONF_EXPORT" >/dev/null 2>&1 || { log "conf-export.sh 失败"; return 1; }
+	[ -f "$RUNTIME_CONF" ] || { log "$RUNTIME_CONF 不存在"; return 1; }
+	. "$RUNTIME_CONF"
+	[ -n "${NEXT_HOP:-}" ] || { log "next_hop 为空"; return 1; }
+	[ -n "${TABLE_ID:-}" ] || { log "table_id 为空"; return 1; }
+	[ -n "${MATCH_VALUE:-}" ] || { log "match_value 为空"; return 1; }
+	return 0
+}
+
+install_routes() {
+	# 表名登记：缺了 ip route 会报 "table id 250 not in rt_tables"。
+	# 同一个 id 换过名字时，把旧名字删掉，否则 rt_tables 里会出现两个名字指向同一个表。
+	if ! grep -qE "^${TABLE_ID}[[:space:]]+${TABLE_NAME}\$" /etc/iproute2/rt_tables; then
+		sed -i "/^${TABLE_ID}[[:space:]]/d" /etc/iproute2/rt_tables
+		printf '%s %s\n' "$TABLE_ID" "$TABLE_NAME" >> /etc/iproute2/rt_tables
+	fi
+
+	# 预热 ARP：开机时邻居表是空的。装路由本身不依赖 ping 结果 ——
+	# next_hop 真挂了就该 fail-close（丢包），而不是悄悄退回主表走真实宽带出口。
+	ping -c1 -W1 "$NEXT_HOP" >/dev/null 2>&1
+	ip -4 route replace default via "$NEXT_HOP" dev "$LAN_DEV" table "$TABLE_ID"
+
+	# 主表的直连路由副本（去旁路由的 L2 路径 + 回程）
+	ip -4 route show table main scope link | while read -r r; do
+		[ -n "$r" ] && ip -4 route replace $r table "$TABLE_ID" 2>/dev/null
+	done
+
+	# 规则幂等：先删后加，避免重启后重复堆叠
+	ip -4 rule del pref "$PREF" 2>/dev/null
+	ip -4 rule add fwmark "$MATCH_VALUE/$MATCH_MASK" lookup "$TABLE_ID" pref "$PREF"
+}
+
+start() {
+	load_conf || return 1
+	install_routes && log "started: pref=$PREF fwmark=$MATCH_VALUE/$MATCH_MASK table=$TABLE_ID via $NEXT_HOP dev $LAN_DEV"
+}
+
+stop() {
+	. "$RUNTIME_CONF" 2>/dev/null || true
+	PREF=${PREF:-28000}
+	TABLE_ID=${TABLE_ID:-250}
+	ip -4 rule del pref "$PREF" 2>/dev/null
+	ip -4 route flush table "$TABLE_ID" 2>/dev/null
+	log "stopped: rule $PREF removed, table $TABLE_ID flushed"
+}
+
+# restart 刻意不做 stop：stop 会 flush 表，中间那一下打标流量没有下一跳会被丢。
+# install_routes 本身全是 replace / del+add，幂等，直接重跑即可。
+restart() { start; }
+reload()  { start; }

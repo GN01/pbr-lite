@@ -1,0 +1,17 @@
+{
+	"luci-app-pbr-lite": {
+		"description": "Grant access to PBR Lite status, self-check, settings, rule source and diagnostics",
+		"read": {
+			"ubus": {
+				"pbr-lite": [ "status", "verify", "lookup_ip", "export_conf", "job_status", "diag", "diag_bundle", "detect_peer" ]
+			},
+			"uci": [ "pbr-lite" ]
+		},
+		"write": {
+			"ubus": {
+				"pbr-lite": [ "apply_config", "update", "rollback" ]
+			},
+			"uci": [ "pbr-lite" ]
+		}
+	}
+}

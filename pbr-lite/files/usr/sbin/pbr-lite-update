@@ -1,0 +1,519 @@
+#!/bin/sh
+# pbr-lite-update -- 刷新「非中国公网地址集合」并重建 fw4 include
+#
+# 这是 pbr-lite 的数据面唯一入口。它不做策略决策，只负责：
+#   1. 下载中国 IPv4 列表
+#   2. 算补集（0.0.0.0/0 减去中国、减去内网保留段、减去直连白名单）
+#   3. 生成 /usr/share/nftables.d/ruleset-post/30-pbr-lite.nft
+#   4. 预检 -> 备份 -> 换文件 -> fw4 reload -> 精确校验 -> 失败回滚
+#   5. 写 state.json / history.tsv / not-cn.txt
+#
+# 与 pbr 的根本区别：pbr 的 restart 是「先 stop 删掉 nft 文件再 reload，再花几十秒
+# 重建」，中间有一段完全没有打标规则；这里是「先算好新文件、nft 预检通过，再一次性
+# 换掉」，fw4 只 reload 一次，运行中的规则集在那一刻整体切换，没有空窗。
+#
+# 用法：
+#   pbr-lite-update                正常更新（内容没变不 reload）
+#   pbr-lite-update --dry-run      只算不落地，打印差异
+#   pbr-lite-update --force        内容没变也重装 + reload
+#   pbr-lite-update --json         机器可读输出（供 LuCI 调用）
+#   pbr-lite-update --no-reload    只写文件，不动运行中的规则
+#   pbr-lite-update --no-fetch     不下载，用上次缓存的 CN 列表重新生成（改白名单/源地址时用）
+#   pbr-lite-update --rollback [N] 回滚到第 N 新的备份（默认 latest = 1）
+#
+# 退出码：0 成功（含「无变化」）  1 失败  2 参数错误
+set -u
+
+SELF_DIR=$(dirname "$0")
+SHARE_DIR=${SHARE_DIR:-/usr/share/pbr-lite}
+. "$SHARE_DIR/lib.sh"
+
+DRY=0; FORCE=0; JSON=0; NORELOAD=0; NOFETCH=0; ROLLBACK=''
+STATE_WRITTEN=0
+PL_ERRMSG=''
+T0=$(pl_now)
+
+usage() {
+    sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'
+    exit 0
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --dry-run)   DRY=1 ;;
+        --force)     FORCE=1 ;;
+        --json)      JSON=1 ;;
+        --no-reload) NORELOAD=1 ;;
+        --no-fetch)  NOFETCH=1 ;;
+        --rollback)  ROLLBACK="${2:-latest}"; [ $# -gt 1 ] && shift ;;
+        -h|--help)   usage ;;
+        *) echo "unknown arg: $1" >&2; exit 2 ;;
+    esac
+    shift
+done
+
+[ "$JSON" = '1' ] && PL_QUIET=1
+
+TMP=''
+_on_exit() {
+    [ -n "$TMP" ] && rm -rf "$TMP"
+    # --json 模式下没能写 state，说明半路失败了：给调用方一个可解析的错误对象
+    if [ "$JSON" = '1' ] && [ "$STATE_WRITTEN" = '0' ]; then
+        printf '{"ok":false,"error":"%s"}\n' "$(pl_jesc "${PL_ERRMSG:-更新未完成}")"
+    fi
+}
+trap '_on_exit' EXIT INT TERM
+
+# ---------------------------------------------------------------- 配置
+"$SHARE_DIR/conf-export.sh" >/dev/null 2>&1 || pl_die "生成配置失败（uci 配置有问题？）"
+[ -f "$PL_CONF" ] || pl_die "$PL_CONF 不存在"
+. "$PL_CONF"
+INCLUDE="${INCLUDE:-$PL_INCLUDE}"
+
+# ---------------------------------------------------------------- 基础设施
+# history 与 state 的写入必须在使用之前定义
+_hist() {  # $1=ts $2=result $3=changed $4=entries
+    mkdir -p "$(dirname "$PL_HISTORY")" 2>/dev/null
+    printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "${4:-0}" >> "$PL_HISTORY"
+    if [ "$(wc -l < "$PL_HISTORY" 2>/dev/null || echo 0)" -gt 200 ]; then
+        tail -200 "$PL_HISTORY" > "$PL_HISTORY.tmp" && mv -f "$PL_HISTORY.tmp" "$PL_HISTORY"
+    fi
+}
+
+_rollback_latest() {
+    _b=$(ls -1t "$PL_BAKDIR"/30-pbr-lite.nft.* 2>/dev/null | head -1)
+    if [ -n "$_b" ]; then
+        cp -f "$_b" "$INCLUDE"
+        fw4 -q reload 2>/dev/null
+        pl_log "已回滚到 $(basename "$_b") 并重新 reload"
+        _sync_notcn
+        _hist "$(pl_now)" "rolled_back" 1 "${m:-0}"
+    else
+        pl_log "没有备份可回滚！请手工检查 $INCLUDE"
+    fi
+}
+
+# 把 include 里 SET_DST 的元素块抽回成纯 CIDR 列表。
+# not-cn.txt 是 lookup-ip / verify 用的「数据面镜像」，必须以 include 为唯一真相：
+# 回滚只换了 include，如果不重抽，not-cn.txt 会停在上一版 —— 数据面是对的，
+# 查询结论却是错的（本项目实测踩到：回滚后 8.8.8.8 被报成 cn_unknown）。
+_extract_elems() {
+    sed -n "/^add element inet fw4 ${SET_DST} {/,/^}/p" "$1" 2>/dev/null \
+        | sed '1d;$d' \
+        | tr -d ' ' \
+        | tr ',' '\n' \
+        | sed '/^$/d'
+}
+
+_sync_notcn() {
+    [ -f "$INCLUDE" ] || return 0
+    _extract_elems "$INCLUDE" > "${PL_NOTCN}.tmp" 2>/dev/null || return 1
+    if [ ! -s "${PL_NOTCN}.tmp" ]; then
+        rm -f "${PL_NOTCN}.tmp"
+        pl_log "警告：从 include 抽元素为空，$PL_NOTCN 未更新"
+        return 1
+    fi
+    mv -f "${PL_NOTCN}.tmp" "$PL_NOTCN" || return 1
+    return 0
+}
+
+_write_state() {  # $1=result $2=changed $3=message $4=dst_entries $5=kernel $6=reload_s
+    _ib=0; _il=0
+    [ -f "$INCLUDE" ] && { _ib=$(wc -c < "$INCLUDE" | tr -d ' '); _il=$(wc -l < "$INCLUDE" | tr -d ' '); }
+    _h=""
+    if [ -f "$PL_HISTORY" ]; then
+        _h=$(tail -10 "$PL_HISTORY" | awk -F'\t' '
+            BEGIN { printf "" }
+            {
+                if (NR > 1) printf ",\n"
+                printf "    {\"ts\": %s, \"result\": \"%s\", \"changed\": %s, \"entries\": %s}", $1, $2, $3, $4
+            }')
+    fi
+    {
+        printf '{\n'
+        printf '  "schema": 1,\n'
+        printf '  "generator": "pbr-lite-update %s",\n' "$PL_VERSION"
+        printf '  "generated_at": %s,\n' "$(pl_now)"
+        printf '  "generated_at_iso": "%s",\n' "$(pl_now_iso)"
+        printf '  "src_url": "%s",\n' "$(pl_jesc "${SRC_URL:-}")"
+        printf '  "src_entries": %s,\n' "${n:-0}"
+        printf '  "src_sha256": "%s",\n' "${SRC_SHA:-}"
+        printf '  "dst_entries": %s,\n' "${4:-0}"
+        printf '  "direct_entries": %s,\n' "${dcount:-0}"
+        printf '  "include_bytes": %s,\n' "$_ib"
+        printf '  "include_lines": %s,\n' "$_il"
+        printf '  "include_path": "%s",\n' "$(pl_jesc "$INCLUDE")"
+        printf '  "enabled": %s,\n' "${ENABLED:-0}"
+        printf '  "last_run": {\n'
+        printf '    "ts": %s,\n' "$(pl_now)"
+        printf '    "result": "%s",\n' "$1"
+        printf '    "changed": %s,\n' "$2"
+        printf '    "message": "%s",\n' "$(pl_jesc "${3:-}")"
+        printf '    "kernel_entries": %s,\n' "${5:-0}"
+        printf '    "reload_seconds": %s,\n' "${6:-0}"
+        printf '    "duration_s": %s\n' "$(( $(pl_now) - T0 ))"
+        printf '  },\n'
+        printf '  "history": [\n%s\n  ]\n' "$_h"
+        printf '}\n'
+    } > "$PL_STATE.tmp" && mv -f "$PL_STATE.tmp" "$PL_STATE"
+    STATE_WRITTEN=1
+    if [ "$JSON" = '1' ]; then
+        cat "$PL_STATE"
+    fi
+}
+
+# ---------------------------------------------------------------- 回滚分支
+do_rollback() {
+    [ -d "$PL_BAKDIR" ] || pl_die "没有备份目录 $PL_BAKDIR"
+    case "$ROLLBACK" in
+        latest|'') pick=1 ;;
+        *[!0-9]*)  pl_die "回滚参数只能是数字或 latest：$ROLLBACK" ;;
+        *)         pick="$ROLLBACK" ;;
+    esac
+    src=$(ls -1t "$PL_BAKDIR"/30-pbr-lite.nft.* 2>/dev/null | sed -n "${pick}p")
+    [ -n "$src" ] || pl_die "找不到第 $pick 个备份"
+    pl_log "回滚：$(basename "$src") -> $INCLUDE"
+    cp -f "$src" "$INCLUDE" || pl_die "写入 $INCLUDE 失败"
+    if [ "$NORELOAD" = '0' ]; then
+        fw4 -q reload || pl_die "fw4 reload 失败（文件已换，规则可能未生效，手工 fw4 reload）"
+    fi
+    m=$(_extract_elems "$INCLUDE" | wc -l | tr -d ' ')
+    m=${m:-0}
+    # 回滚只换了 include，镜像 not-cn.txt 必须跟着重抽，否则查询结论会停在上一版
+    _sync_notcn
+    _hist "$(pl_now)" "rolled_back" 1 "$m"
+    _write_state "rolled_back" 1 "手工回滚到 $(basename "$src")" "$m" 0 0
+    pl_log "已回滚到 $(basename "$src")（$m 条）"
+    exit 0
+}
+
+[ -n "$ROLLBACK" ] && do_rollback
+
+# ---------------------------------------------------------------- 配置自检
+pl_log "pbr-lite $PL_VERSION 开始（enabled=$ENABLED guard=$GUARD）"
+[ "$ENABLED" = '1' ] || pl_log "注意: 分流已关闭，本次只刷新集合、不下发规则"
+
+[ -n "${SRC_ADDRS:-}" ] || pl_die "lan.src_addr 为空（没有设备会被分流）"
+for _a in $SRC_ADDRS; do
+    case "$_a" in
+        */*) _ip="${_a%%/*}"; _len="${_a##*/}"
+             is_ipv4 "$_ip" || pl_die "lan.src_addr 里的 $_a 不是合法 IPv4"
+             case "$_len" in ''|*[!0-9]*) pl_die "lan.src_addr 里的 $_a 前缀长度非法" ;; esac
+             [ "$_len" -le 32 ] || pl_die "lan.src_addr 里的 $_a 前缀长度越界" ;;
+        *)   is_ipv4 "$_a" || pl_die "lan.src_addr 里的 $_a 不是合法 IPv4" ;;
+    esac
+done
+
+[ -n "${DAE_MAC:-}" ] || pl_die "dae.mac 为空（循环兜底会失效）"
+echo "$DAE_MAC" | grep -qiE '^([0-9a-f]{2}:){5}[0-9a-f]{2}$' || pl_die "dae.mac 格式不对：$DAE_MAC"
+
+for _v in MARK_VALUE MARK_MASK; do
+    eval "_h=\$$_v"
+    [ "$(hex2dec "$_h")" = 'ERR' ] && pl_die "$_v 不是合法十六进制：$_h"
+done
+[ "$(band "$(hex2dec "$MARK_VALUE")" "$(hex2dec "$MARK_MASK")")" = '0' ] \
+    || pl_die "MARK_MASK=$MARK_MASK 会把要置的 $MARK_VALUE 位清掉，打标永远不生效"
+
+for _s in SET_SRC SET_DST; do
+    eval "_n=\$$_s"
+    echo "$_n" | grep -qE '^[A-Za-z_][A-Za-z0-9_]*$' || pl_die "$_s 不是合法的 nft 集合名：$_n"
+done
+
+[ -s "$PL_EXCLUDE" ] || pl_die "排除段文件 $PL_EXCLUDE 缺失或为空（这是安全边界，不能继续）"
+[ -f "$SHARE_DIR/gen-not-cn.awk" ] || pl_die "gen-not-cn.awk 不存在"
+command -v curl >/dev/null 2>&1 || pl_die "curl 未安装（opkg install curl ca-bundle）"
+command -v nft  >/dev/null 2>&1 || pl_die "nft 未安装"
+mkdir -p "$(dirname "$INCLUDE")" || pl_die "无法创建 $(dirname "$INCLUDE")"
+
+TMP=$(mktemp -d /tmp/pbr-lite.XXXXXX) || pl_die "mktemp 失败"
+
+# ---------------------------------------------------------------- 1. 取 CN 列表
+# --no-fetch：改源地址列表 / 直连白名单 / mark 时，CN 列表根本没变，
+# 没必要再花 10 秒下载一遍（也避免上游临时抽风把一次普通编辑变成失败）。
+_use_cache=0
+if [ "$NOFETCH" = '1' ]; then
+    if [ -s "$PL_CNCACHE" ]; then
+        _use_cache=1
+        pl_log "使用缓存 CN 列表（--no-fetch）"
+    else
+        pl_log "--no-fetch 但缓存不存在，改为下载"
+    fi
+fi
+
+if [ "$_use_cache" = '1' ]; then
+    cp -f "$PL_CNCACHE" "$TMP/cn.txt" || { _hist "$(pl_now)" "failed" 0 0; pl_die "复制缓存失败"; }
+else
+    pl_log "下载 $SRC_URL"
+    if ! curl -fsSL -m 120 --retry 1 --retry-delay 2 -o "$TMP/cn.txt" "$SRC_URL"; then
+        _hist "$(pl_now)" "failed" 0 0; pl_die "下载失败"
+    fi
+    [ -s "$TMP/cn.txt" ] || { _hist "$(pl_now)" "failed" 0 0; pl_die "下载到空文件"; }
+fi
+
+n=$(wc -l < "$TMP/cn.txt" | tr -d ' ')
+bad=$(grep -vcE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$' "$TMP/cn.txt" 2>/dev/null || true)
+[ "${bad:-0}" -le 50 ] || { _hist "$(pl_now)" "failed" 0 0; pl_die "有 $bad 行不是合法 CIDR，疑似上游格式变了"; }
+pl_log "CN 列表 $n 行（非法 ${bad:-0} 行会被跳过）"
+SRC_SHA=$(sha256sum "$TMP/cn.txt" | awk '{print $1}')
+
+# ---------------------------------------------------------------- 2. 算补集
+awk -v pass=1 -v excludefile="$PL_EXCLUDE" -v directfile="$PL_DIRECT" \
+    -f "$SHARE_DIR/gen-not-cn.awk" "$TMP/cn.txt" \
+    | sort \
+    | awk -v pass=2 -f "$SHARE_DIR/gen-not-cn.awk" > "$TMP/new" \
+    || { _hist "$(pl_now)" "failed" 0 0; pl_die "生成补集失败"; }
+[ -s "$TMP/new" ] || { _hist "$(pl_now)" "failed" 0 0; pl_die "补集为空"; }
+
+m=$(wc -l < "$TMP/new" | tr -d ' ')
+[ "$m" -ge "${MIN_ENTRIES:-5000}" ] \
+    || { _hist "$(pl_now)" "failed" 0 0; pl_die "补集只有 $m 条（下限 ${MIN_ENTRIES:-5000}），明显不对"; }
+pl_log "补集 $m 条"
+
+# 条目数漂移：上游被截断时补集会暴涨，这比「看集合大小」可靠得多
+if [ -f "$PL_NOTCN" ] && [ "$FORCE" = '0' ]; then
+    old_m=$(wc -l < "$PL_NOTCN" | tr -d ' ')
+    if [ "${old_m:-0}" -gt 0 ]; then
+        drift=$(awk -v a="$old_m" -v b="$m" 'BEGIN { d = (b - a) / a * 100; if (d < 0) d = -d; printf "%.0f", d }')
+        if [ "$drift" -gt "${MAX_DRIFT:-40}" ]; then
+            _hist "$(pl_now)" "failed" 0 0
+            pl_die "补集条目 $old_m -> $m（漂移 ${drift}% > ${MAX_DRIFT}%），疑似上游异常；确认无误请加 --force"
+        fi
+        [ "$drift" -gt 10 ] && pl_log "注意：补集条目 $old_m -> $m（漂移 ${drift}%）"
+    fi
+fi
+
+# ---------------------------------------------------------------- 3. 成员抽查
+# 一次 awk 扫描判完 6 个地址。原来是每个地址调一次 in_cidr_file，
+# 每次都要把 1.1 万行重读重解析一遍：实测 5s，占整个更新的近一半（10.7s 里）。
+_pos=''
+for _ip in 8.8.8.8 1.1.1.1 104.16.0.1; do
+    # 这段要是被用户加进了直连白名单，或者本身就是保留段，那它本来就不该在集合里
+    if in_cidr_file "$_ip" "$PL_DIRECT" 2>/dev/null || in_cidr_file "$_ip" "$PL_EXCLUDE" 2>/dev/null; then
+        pl_log "抽查跳过 $_ip（已被直连白名单或保留段覆盖）"
+        continue
+    fi
+    _pos="$_pos $_ip"
+done
+_neg='223.5.5.5 114.114.114.114 36.110.228.204'
+in_cidr_multi "$TMP/new" $_pos $_neg > "$TMP/chk" \
+    || { _hist "$(pl_now)" "failed" 0 0; pl_die "成员抽查执行失败"; }
+_np=0; _nn=0; _bad=''
+while read -r _ip _f; do
+    [ -n "$_ip" ] || continue
+    case " $_neg " in
+        *" $_ip "*)
+            _nn=$((_nn + 1))
+            [ "$_f" = '1' ] && _bad="$_ip 是 CN 地址却被收进集合"
+            ;;
+        *)
+            _np=$((_np + 1))
+            [ "$_f" = '1' ] || _bad="$_ip 应该在集合里却不在"
+            ;;
+    esac
+done < "$TMP/chk"
+[ -z "$_bad" ] || { _hist "$(pl_now)" "failed" 0 0; pl_die "抽查失败：$_bad"; }
+pl_log "成员抽查通过（${_np} 正 ${_nn} 反）"
+
+# 到这里 CN 列表已经过格式、条目下限、漂移、正反抽查四道关，可以放心当缓存。
+# 放在这里而不是收尾处：后面还有「内容无变化 → exit 0」的提前退出路径，
+# 放收尾会漏掉那种情况（首次下载正好无变化时缓存永远建不起来）。
+# 也刻意不放在下载后立刻写：那时还没验，上游截断的烂数据会被缓存固化，
+# 之后 --no-fetch 每次都用它，用户得自己想到去跑一次完整的才解得开。
+[ "$_use_cache" = '1' ] || cp -f "$TMP/cn.txt" "$PL_CNCACHE" 2>/dev/null || pl_log "警告：写 $PL_CNCACHE 失败"
+
+dcount=0
+if [ -n "${DIRECT_DST:-}" ]; then
+    for _d in $DIRECT_DST; do
+        dcount=$((dcount + 1))
+        _net="${_d%%/*}"
+        if in_cidr_file "$_net" "$TMP/new"; then
+            _hist "$(pl_now)" "failed" 0 0
+            pl_die "直连白名单 $_d 仍在补集里（gen-not-cn.awk 没读到 directfile？）"
+        fi
+    done
+    pl_log "直连白名单 $dcount 条，均已从补集中扣除"
+fi
+
+# ---------------------------------------------------------------- 4. 生成 include
+gen_include() {
+    _out="$1"
+    {
+        echo '# pbr-lite -- 由 pbr-lite-update 自动生成，勿手工编辑'
+        echo "# 生成器: pbr-lite-update $PL_VERSION"
+        echo "# CN 源: $SRC_URL"
+        echo "# 源条目: $n   补集条目: $m   直连白名单: $dcount"
+        echo "# 源 sha256: $SRC_SHA"
+        echo "# 源地址: $SRC_ADDRS"
+        echo "# 启用: $ENABLED   兜底: $GUARD"
+        echo '# 注意: 本文件刻意不含时间戳 —— 内容完全由输入决定，输入不变则文件不变，'
+        echo '#       cmp 才能判断「有没有变化」，避免每天无谓地 reload 一次。'
+        echo '#'
+        echo '# 装载: 本文件位于 ruleset-post，追加在 fw4 规则集末尾，故用全限定 add ... inet fw4'
+        echo '#'
+        echo '# 为什么是 add set + flush set + add element 三段，而不是 add set { elements = ... }：'
+        echo '#   fw4 重载只执行 flush table（复位链和规则），nft 的 flush table 不会清 set 对象，'
+        echo '#   已存在的集合原样保留；而 add set 对已存在的集合是幂等的 —— 整个 elements 块被'
+        echo '#   静默跳过，新列表根本装不进去（表现为「文件更新了、内核还是旧数据」，零报错）。'
+        echo '#   必须显式 flush set 清掉旧元素再重新 add element。'
+        echo '#   nft -f 是单事务，flush 与 add 之间不会被外部看到，没有「集合为空→不打标→漏 IP」的窗口。'
+        echo
+        echo "add set inet fw4 $SET_SRC { type ipv4_addr; flags interval; }"
+        echo "flush set inet fw4 $SET_SRC"
+        printf 'add element inet fw4 %s {' "$SET_SRC"
+        _first=1
+        for _ip in $SRC_ADDRS; do
+            if [ "$_first" = '1' ]; then _first=0; else printf ', '; fi
+            printf '%s' "$_ip"
+        done
+        printf ' }\n'
+        echo
+        echo "add set inet fw4 $SET_DST { type ipv4_addr; flags interval; }"
+        echo "flush set inet fw4 $SET_DST"
+        echo "add element inet fw4 $SET_DST {"
+        awk '
+        { a[NR] = $0 }
+        END {
+            printf "  "
+            for (i = 1; i <= NR; i++) {
+                printf "%s", a[i]
+                if (i < NR) printf ", "
+                if (i % 8 == 0 && i < NR) printf "\n  "
+            }
+            printf "\n"
+        }' "$TMP/new"
+        echo '}'
+        echo
+
+        if [ "$ENABLED" != '1' ]; then
+            echo '# 分流已关闭：只保留集合声明（下次开启无需重算），不下发任何规则'
+            return 0
+        fi
+        if [ "$GUARD" = '1' ]; then
+            echo '# 循环兜底：源 MAC 是旁路由网卡、源/目的又都命中分流条件 -> 说明旁路由把'
+            echo '# 本该自己终结的包原样转回来了。再打标会在路由器与旁路由之间弹到 TTL 耗尽，直接丢。'
+            echo '# 正常运行时旁路由在本地终结连接，这条零命中；换网卡后要改 dae.mac 并重跑。'
+            echo "add rule inet fw4 mangle_prerouting ether saddr $DAE_MAC ip saddr @$SET_SRC ip daddr @$SET_DST counter drop"
+            echo
+        fi
+        echo "# 打标：源在 $SET_SRC 且目的不在中国 -> 打上 $MARK_VALUE，由 ip rule $PREF 送进表 $TABLE_ID"
+        echo "add rule inet fw4 mangle_prerouting ip saddr @$SET_SRC ip daddr @$SET_DST counter meta mark set (meta mark & $MARK_MASK) | $MARK_VALUE"
+    } > "$_out"
+}
+
+gen_include "$TMP/include.new" || { _hist "$(pl_now)" "failed" 0 0; pl_die "生成 include 失败"; }
+
+# ---------------------------------------------------------------- 5. 语法预检
+# nft -c 是对着「当前」规则集做检查，集合已存在会报 File exists，
+# 所以用一份把集合名改掉的副本：语法/元素格式/规则结构全都验到，又不碰线上对象。
+sed -e "s/$SET_SRC/${SET_SRC}_chk/g" -e "s/$SET_DST/${SET_DST}_chk/g" \
+    "$TMP/include.new" > "$TMP/include.chk"
+if ! nft -c -f "$TMP/include.chk" 2>"$TMP/nfterr"; then
+    cat "$TMP/nfterr" >&2
+    _hist "$(pl_now)" "failed" 0 0
+    pl_die "nft 语法预检失败"
+fi
+pl_log "nft 语法预检通过"
+
+# ---------------------------------------------------------------- 6. 差异
+changed=1
+[ -f "$INCLUDE" ] && cmp -s "$TMP/include.new" "$INCLUDE" && changed=0
+
+if [ "$DRY" = '1' ]; then
+    pl_log "--dry-run：changed=$changed，补集 $m 条，新文件 $(wc -l < "$TMP/include.new" | tr -d ' ') 行"
+    if [ "$changed" = '1' ]; then
+        if command -v diff >/dev/null 2>&1; then
+            pl_log '--- 与现有文件差异（前 40 行）---'
+            diff "$INCLUDE" "$TMP/include.new" 2>/dev/null | head -40
+        else
+            pl_log '（本机没有 diff，跳过差异展示；可用 --json 看条目数变化）'
+        fi
+    fi
+    exit 0
+fi
+
+if [ "$changed" = '0' ] && [ "$FORCE" = '0' ]; then
+    pl_log "内容无变化（$m 条），不 reload"
+    # 内容虽然没变，镜像文件仍要同步一次：上一轮可能是回滚/手改把它们弄岔了，
+    # 这里顺手纠回来，成本只有一次 cp。
+    cp -f "$TMP/new" "$PL_NOTCN" 2>/dev/null || pl_log "警告：写 $PL_NOTCN 失败"
+    _hist "$(pl_now)" "nochange" 0 "$m"
+    _write_state "nochange" 0 "内容无变化" "$m" "$m" 0
+    exit 0
+fi
+
+# ---------------------------------------------------------------- 7. 落地
+mkdir -p "$PL_BAKDIR"
+if [ -f "$INCLUDE" ]; then
+    _slot="$PL_BAKDIR/30-pbr-lite.nft.$(date +%Y%m%d-%H%M%S)"
+    cp -f "$INCLUDE" "$_slot" || pl_die "备份旧文件失败"
+    pl_log "旧文件已备份到 $(basename "$_slot")"
+    ls -1t "$PL_BAKDIR"/30-pbr-lite.nft.* 2>/dev/null | tail -n +6 | while read -r _f; do
+        rm -f "$_f"
+    done
+fi
+
+cp -f "$TMP/include.new" "$INCLUDE" || { _hist "$(pl_now)" "failed" 0 0; pl_die "写入 $INCLUDE 失败"; }
+
+S=$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0)
+if [ "$NORELOAD" = '0' ]; then
+    if ! fw4 -q reload 2>"$TMP/fw4err"; then
+        cat "$TMP/fw4err" >&2
+        pl_log "fw4 reload 失败，回滚"
+        _rollback_latest
+        _hist "$(pl_now)" "failed" 1 "$m"
+        _write_state "failed" 1 "fw4 reload 失败（已尝试回滚）" "$m" 0 0
+        exit 1
+    fi
+fi
+E=$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0)
+RELOAD_S=$((E-S)); [ "$NORELOAD" = '1' ] && RELOAD_S=0
+
+# ---------------------------------------------------------------- 8. 生效校验
+# 必须和文件条目数精确比对。用「>= 1000」这种阈值的话，即使集合压根没刷新、
+# 还是昨天的旧数据，也会被判成通过（本项目实测踩到过）。
+kc=0
+if [ "$NORELOAD" = '0' ]; then
+    kc=$(nft list set inet fw4 "$SET_DST" 2>/dev/null | grep -o ',' | wc -l | tr -d ' ')
+    kc=$(( ${kc:-0} + 1 ))
+    rl=$(nft list chain inet fw4 mangle_prerouting 2>/dev/null | grep -c "@$SET_DST" || true)
+    if [ "$ENABLED" = '1' ]; then
+        if [ "$GUARD" = '1' ]; then want=2; else want=1; fi
+    else
+        want=0
+    fi
+    if [ "$kc" -eq "$m" ] && [ "${rl:-0}" -ge "$want" ]; then
+        pl_log "校验通过：内核 $kc 条 == 文件 $m 条，规则引用 ${rl} 条（期望 >= $want），reload ${RELOAD_S}s"
+    else
+        pl_log "校验失败：内核 $kc 条 / 文件 $m 条，规则引用 ${rl:-0} 条（期望 >= $want）"
+        _rollback_latest
+        _hist "$(pl_now)" "rolled_back" 1 "$m"
+        _write_state "rolled_back" 1 "内核条目与文件不一致，已回滚" "$m" "$kc" "$RELOAD_S"
+        exit 1
+    fi
+else
+    pl_log "--no-reload：文件已更新，运行中的规则集未变"
+fi
+
+# ---------------------------------------------------------------- 9. 收尾
+cp -f "$TMP/new" "$PL_NOTCN" 2>/dev/null || pl_log "警告：写 $PL_NOTCN 失败（影响 lookup-ip 与条目比对）"
+
+# 旧版集合清理：fw4 reload 不清 set 对象，改名后会留下两个装着一万多条元素的空壳。
+# 只在旧 include 已经不在了的时候才删，否则下次 fw4 reload 又会把它装回来。
+if [ ! -f /usr/share/nftables.d/ruleset-post/30-sdwan.nft ]; then
+    for _s in sdwan_src sdwan_notcn; do
+        [ "$_s" = "$SET_SRC" ] && continue
+        [ "$_s" = "$SET_DST" ] && continue
+        if nft list set inet fw4 "$_s" >/dev/null 2>&1; then
+            if nft delete set inet fw4 "$_s" 2>/dev/null; then
+                pl_log "已清理旧集合 $_s"
+            else
+                pl_log "清理旧集合 $_s 失败（可能仍被规则引用）"
+            fi
+        fi
+    done
+fi
+
+_hist "$(pl_now)" "ok" "$changed" "$m"
+_write_state "ok" "$changed" "" "$m" "$kc" "$RELOAD_S"
+pl_log "完成（${m} 条，耗时 $(( $(pl_now) - T0 ))s）"
+exit 0

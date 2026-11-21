@@ -1,0 +1,9 @@
+*.ipk
+*.apk
+*.orig
+*.rej
+*.bak
+*.swp
+*~
+.DS_Store
+/tmp/
