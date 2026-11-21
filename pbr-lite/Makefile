@@ -19,7 +19,7 @@ define Package/pbr-lite
   SECTION:=net
   CATEGORY:=Network
   TITLE:=Lightweight policy based routing (non-CN traffic via a side router)
-  URL:=https://github.com/gongweijin/pbr-lite
+  URL:=https://github.com/GN01/pbr-lite
   DEPENDS:=+nftables +curl +ca-bundle +firewall4 +ip-tiny +kmod-nft-core +kmod-nft-nat
 endef
 

@@ -65,7 +65,7 @@
 
 ```sh
 cd openwrt
-git clone https://github.com/<you>/pbr-lite package/pbr-lite
+git clone https://github.com/GN01/pbr-lite package/pbr-lite
 make menuconfig      # Network → pbr-lite；LuCI → Applications → luci-app-pbr-lite
 make package/pbr-lite/compile V=s
 ```

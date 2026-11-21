@@ -23,7 +23,7 @@ define Package/luci-app-pbr-lite
   CATEGORY:=LuCI
   SUBMENU:=3. Applications
   TITLE:=LuCI support for PBR Lite
-  URL:=https://github.com/gongweijin/pbr-lite
+  URL:=https://github.com/GN01/pbr-lite
   DEPENDS:=+luci-base +rpcd-mod-ucode +ucode-mod-uci +pbr-lite
 endef
 
