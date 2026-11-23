@@ -166,17 +166,21 @@ echo '17 4 * * * /usr/sbin/pbr-lite-update' >> /etc/crontabs/root
 
 ### 界面预览
 
-浅色主题下的真实截图（1440 宽，跑在 QWRT 25.12.3 / aarch64 上）。图片在 `docs/screenshots/`。
+三张实机截图（QWRT 25.12.3 / aarch64，浅色主题）。
 
-**概览** —— 先用 `status` 渲染首屏，9 组自检异步补进来。计数那一栏底下那行灰字是
-flow offload 的提示：开了硬件加速之后被卸载的包不再经过 nft 规则链，命中数只会是残余量。
+**概览** —— 首屏只用 `status` 渲染（约 0.6 秒），9 组自检异步补进来。
 
-![概览](docs/screenshots/01-overview.png)
+![概览](docs/screenshots/overview.png)
 
-| | |
-|---|---|
-| **分流设置** —— 开关、生效地址、直连白名单、旁路由（MAC 可一键探测）<br>![分流设置](docs/screenshots/02-settings.png) | **高级设置** —— 打标值、路由表号、集合名；改动要手打 `CONFIRM`<br>![高级设置](docs/screenshots/03-advanced.png) |
-| **规则源** —— 列表地址、条目下限、漂移阈值、立即更新与回滚<br>![规则源](docs/screenshots/04-source.png) | **诊断** —— 输入 IP 看它该不该走代理、实际走了哪条路由<br>![诊断](docs/screenshots/05-diagnostics.png) |
+**分流设置** —— 开关、生效地址、直连白名单、旁路由。保存前会先算生效半径：
+只改路由层约 1 秒，动到集合就要重建规则，约 10 秒。
+
+![分流设置](docs/screenshots/settings.png)
+
+**规则源** —— 列表地址、条目下限、漂移阈值。条目数、漂移、反查抽查三道校验
+任何一道不过就保留旧数据，宁可不动也不装半截列表。
+
+![规则源](docs/screenshots/source.png)
 
 「高级设置」单独一页是有意的：那七八项正常用不到（默认值就是对的），混在日常开关里
 一是页面太长、二是改错代价大——打标值改错会让打标流量从主表出去，集合名改错会让旧集合残留。
