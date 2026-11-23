@@ -15,6 +15,13 @@ PKGARCH:=all
 
 include $(INCLUDE_DIR)/package.mk
 
+# 纯脚本包，没有要编译的东西。但 include/package.mk 给 Build/Compile 留了一个
+# 默认实现（在 PKG_BUILD_DIR 里跑 make），而这里根本没有源码和 Makefile，
+# 于是一进 compile 阶段就报 "No targets specified and no makefile found"。
+# 必须显式清空。
+define Build/Compile
+endef
+
 define Package/pbr-lite
   SECTION:=net
   CATEGORY:=Network

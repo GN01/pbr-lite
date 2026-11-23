@@ -18,6 +18,11 @@ PKGARCH:=all
 
 include $(INCLUDE_DIR)/package.mk
 
+# 同 pbr-lite：纯资源包，清空默认的 Build/Compile（否则会在空的
+# PKG_BUILD_DIR 里跑 make，报 "no makefile found"）。
+define Build/Compile
+endef
+
 define Package/luci-app-pbr-lite
   SECTION:=luci
   CATEGORY:=LuCI

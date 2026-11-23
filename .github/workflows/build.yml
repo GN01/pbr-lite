@@ -88,8 +88,10 @@ jobs:
       - name: 编译
         run: |
           cd "$SDK_DIR"
-          # 单个包编失败要看完整日志，所以 V=s 且不并行最外层
-          make -j$(nproc) V=s package/pbr-lite/compile package/luci-app-pbr-lite/compile
+          # 界面包的目录是 package/pbr-lite/luci-app-pbr-lite/，所以
+          # package/pbr-lite/compile 会同时把两个包编出来（别写
+          # package/luci-app-pbr-lite/compile —— 没这个目标）。
+          make -j$(nproc) V=s package/pbr-lite/compile
 
       - name: 收集产物
         run: |
