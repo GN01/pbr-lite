@@ -18,6 +18,11 @@ on:
   release:
     types: [published]
 
+# 新建的仓库默认 GITHUB_TOKEN 是只读（default_workflow_permissions=read），
+# 不显式声明的话最后那步 action-gh-release 会 403。
+permissions:
+  contents: write
+
 jobs:
   build:
     name: ${{ matrix.fmt }} (${{ matrix.sdk }})
