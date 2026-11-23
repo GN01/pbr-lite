@@ -11,6 +11,7 @@ PKG_VERSION:=1.0.0
 PKG_RELEASE:=1
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=gongweijin <gongweijin@banggood.com>
+# 注意：这里的 PKGARCH 不生效也要写——真正起作用的是下面 Package 块里的那一行。
 PKGARCH:=all
 
 include $(INCLUDE_DIR)/package.mk
@@ -28,6 +29,11 @@ define Package/pbr-lite
   TITLE:=Lightweight policy based routing (non-CN traffic via a side router)
   URL:=https://github.com/GN01/pbr-lite
   DEPENDS:=+nftables +curl +ca-bundle +firewall4 +ip-tiny +kmod-nft-core +kmod-nft-nat
+  # 架构无关，必须写在 Package 块里。include/package-defaults.mk 的
+  # Package/Default 会无条件 PKGARCH:=$(ARCH_PACKAGES)，把顶层的赋值冲掉——
+  # 只写顶层的话编出来的包是 Architecture: x86_64，装到 aarch64 路由器上
+  # 会被 opkg 以架构不符拒掉。（luci.mk 也是写在 Package 块里的。）
+  PKGARCH:=all
 endef
 
 define Package/pbr-lite/description

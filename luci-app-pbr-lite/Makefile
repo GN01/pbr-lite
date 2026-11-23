@@ -30,6 +30,8 @@ define Package/luci-app-pbr-lite
   TITLE:=LuCI support for PBR Lite
   URL:=https://github.com/GN01/pbr-lite
   DEPENDS:=+luci-base +rpcd-mod-ucode +ucode-mod-uci +pbr-lite
+  # 同 pbr-lite：必须写在 Package 块里，顶层赋值会被 Package/Default 冲掉。
+  PKGARCH:=all
 endef
 
 define Package/luci-app-pbr-lite/description

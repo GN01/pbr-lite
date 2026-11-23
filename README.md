@@ -59,7 +59,24 @@
 
 ## 安装
 
-### 方式一：编进固件 / 用 SDK 打包
+### 方式一：下载编好的包
+
+每次推送到 `main` 会自动编译（`.github/workflows/build.yml`），到
+[Actions](https://github.com/GN01/pbr-lite/actions/workflows/build.yml) 最近一次运行里下 artifact：
+
+| artifact | 内容 | 适用 |
+|---|---|---|
+| `pbr-lite-ipk` | `pbr-lite_*_all.ipk`、`luci-app-pbr-lite_*_all.ipk` | OpenWrt 24.10 及以前（opkg） |
+| `pbr-lite-apk` | 同名 `.apk` | OpenWrt 25.12 起（apk-tools） |
+
+两个包都是 `PKGARCH:=all`（纯脚本 + 前端资源），**与目标架构无关**，aarch64 / x86 通用：
+
+```sh
+scp pbr-lite_*_all.ipk luci-app-pbr-lite_*_all.ipk root@192.168.0.1:/tmp/
+ssh root@192.168.0.1 'opkg install /tmp/pbr-lite_*_all.ipk /tmp/luci-app-pbr-lite_*_all.ipk'
+```
+
+### 方式二：编进固件 / 用 SDK 打包
 
 把本仓库放进 OpenWrt 的 `package/` 或任意 feed 目录：
 
@@ -70,7 +87,7 @@ make menuconfig      # Network → pbr-lite；LuCI → Applications → luci-app
 make package/pbr-lite/compile V=s
 ```
 
-### 方式二：直接把文件铺上去（不编译）
+### 方式三：直接把文件铺上去（不编译）
 
 仓库自带一个安装脚本，按 `files/` 的目录结构把文件复制到 `/`：
 
