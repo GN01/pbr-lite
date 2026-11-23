@@ -208,7 +208,7 @@ return view.extend({
 		this.refs.guardPk = E('span');
 		this.refs.guardHint = E('span');
 
-		var counterCard = card(_('计数与旁路由健康'), table([
+		var counterBody = [ table([
 			row(_('打标命中'), [
 				E('strong', { 'id': 'pl-mpk' }, fmtNum(ctr.mark_packets)),
 				E('span', { 'class': 'pb-muted' }, ' ' + _('包 / %s').format(fmtBytes(ctr.mark_bytes)))
@@ -232,7 +232,20 @@ return view.extend({
 				E('span', { 'class': 'pb-muted' }, _('表 %s：').format(cfg.table_id)),
 				E('code', { 'style': 'word-break:break-all' }, (st.route && st.route['default']) || '-')
 			])
-		]));
+		]) ];
+
+		// flow offload 与 nft 计数天生互斥：被加速的包不再经过规则链，硬件加速更是
+		// 完全不进 CPU。所以开 offload 时上面的「打标命中」只是残余统计（实测差 50 倍），
+		// 必须在这一行下面说清楚，否则用户会把它当成真实流量。
+		if (rt.offload) {
+			counterBody.push(E('p', {
+				'class': 'pb-muted',
+				'style': 'margin:10px 0 0;font-size:12px;line-height:1.65'
+			}, _('flow offload 已开启（%s）：被加速的包不经过 nft 规则链，上面的命中数只含未卸载的部分，实际流量要大得多。')
+				.format(rt.offload == 'hw' ? _('硬件加速') : _('软件加速'))));
+		}
+
+		var counterCard = card(_('计数与旁路由健康'), counterBody);
 
 		/* ---- 自检 ---- */
 		// 先放占位，页面立刻可见；真正的自检在 return 之前挂一个异步调用

@@ -125,6 +125,19 @@ fi
 consistent=0
 [ "$fe" -gt 0 ] && [ "$kc" -eq "$fe" ] && consistent=1
 
+# flow offload 状态。开启时被加速的包不经过 nft 规则链（硬件加速更是完全不进 CPU），
+# counters 里的打标命中只统计到「未卸载的那部分」，界面上必须据此标注 ——
+# 否则用户会把它当成真实流量（实测差 50 倍以上）。
+_fo_sw=$(uci -q get 'firewall.@defaults[0].flow_offloading' 2>/dev/null)
+_fo_hw=$(uci -q get 'firewall.@defaults[0].flow_offloading_hw' 2>/dev/null)
+if [ "$_fo_hw" = '1' ]; then
+    offload='hw'
+elif [ "$_fo_sw" = '1' ]; then
+    offload='sw'
+else
+    offload=''
+fi
+
 # ---------------------------------------------------------------- 输出
 if [ "$JSON" = '1' ]; then
     printf '{"ok":true,"ts":%s,"version":"%s",' "$(pl_now)" "$PL_VERSION"
@@ -141,7 +154,7 @@ if [ "$JSON" = '1' ]; then
         "$([ -f "$INCLUDE" ] && echo 1 || echo 0)" "$ib" "$il" "$fe"
     printf '"set_loaded":%s,"kernel_entries":%s,"consistent":%s,"rules":%s,' \
         "$kset_ok" "$kc" "$consistent" "$rl"
-    printf '"rule_ok":%s,"route_ok":%s},' "$rule_ok" "$route_ok"
+    printf '"rule_ok":%s,"route_ok":%s,"offload":"%s"},' "$rule_ok" "$route_ok" "$offload"
     printf '"counters":{"mark_packets":%s,"mark_bytes":%s,"guard_packets":%s,"guard_bytes":%s},' \
         "$mark_pk" "$mark_by" "$guard_pk" "$guard_by"
     printf '"route":{"rule":"%s","default":"%s"},' \

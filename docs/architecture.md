@@ -396,6 +396,49 @@ return L.bind(function() {
 按钮点了毫无反应、控制台也没有任何报错。诊断页的「下载诊断包」和概览页的「重新自检」
 都栽在这上面。用 `createHandlerFn` 就别自己管按钮状态；用 `addEventListener` 才需要。
 
+### 5.3 flow offload 与 nft counter 天生互斥
+
+概览页的「打标命中」读的是 include 里那条规则上的 `counter`：
+
+```
+ip saddr @pbrlite_src ip daddr @pbrlite_notcn counter meta mark set ...
+```
+
+计数器挂在 `mangle_prerouting` 上。一旦 `firewall.@defaults[0].flow_offloading`
+或 `flow_offloading_hw` 为 1，连接建立后整条流会被卸载到 flowtable 快路径，
+**后续数据包不再经过规则链**（硬件加速更是完全不进 CPU），counter 只统计到
+未卸载的那部分。
+
+同一时段实测（2026-11-23）：
+
+| | 包速率 | 字节速率 |
+|---|---|---|
+| 开 offload（hw + sw） | 1.2 包/秒 | 2.0 MB/小时 |
+| 关 offload | 72 包/秒 | 32.3 MB/小时 |
+
+差 56 倍。开着 offload 时界面上那个「23.7 MiB」，对应的真实流量是 GB 级。
+
+**这是原理性的，不是配置问题** —— offload 的定义就是「让包绕过 netfilter」。
+所以别试图「修好计数器」，只能在界面上如实标注：`status.sh` 的 `runtime`
+多了一个 `offload` 字段（`hw` / `sw` / 空），概览页据此条件显示一行说明。
+
+另外三条路都试过或评估过，各有代价：
+
+- **关 offload**：计数准确，但慢路径单核只跑到 456 Mbps（千兆宽带从 900+ 掉到 456），
+  单核打满。不可接受，已恢复。
+- **借 `luci.client-rates`**：QWRT 的 `/usr/lib/rpcd/luci.so`（编译好的 C 插件，
+  源码里搜不到）。实测在 offload 下**确实准确** —— 60 秒内 totals 增长 15,716 字节，
+  同期该设备有 5 条 `[OFFLOAD]` 流。但它的 `totals` 是**设备全部流量**，含 CN 直连
+  和内网互传，不能表示「转发到旁路由的流量」，接进来只会误导得更厉害。
+  另外它的累计窗口是 rpcd 启动以来（实测 44 小时），rpcd 重启即清零。
+- **用 flowtable 自带的 counter**：fw4 的 flowtable 确实带 `counter`
+  （`nft list flowtables` 可见，卸载层计数所以准确），但它是**全局聚合**，
+  nft 不暴露 per-flow 计数，无法按设备或按规则拆开。
+
+顺带一个排查经验：`conntrack` 的 accounting 在 offload 下同样失效 —— 一条
+`[OFFLOAD]` 连接的 `bytes` 25 秒内一动不动，而实际下行已 1.5 MB。凡是看到
+「conntrack 字节数不涨」，先查 `flow_offloading`，别怀疑 conntrack 坏了。
+
 ## 6. 还没做的
 
 - **IPv6**：schema 已预留 `family` 字段，但集合、补集算法、ip rule 都是 v4-only。
