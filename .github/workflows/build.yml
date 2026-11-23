@@ -88,21 +88,30 @@ jobs:
       - name: 编译
         run: |
           cd "$SDK_DIR"
-          # 界面包的目录是 package/pbr-lite/luci-app-pbr-lite/，所以
-          # package/pbr-lite/compile 会同时把两个包编出来（别写
-          # package/luci-app-pbr-lite/compile —— 没这个目标）。
-          make -j$(nproc) V=s package/pbr-lite/compile
+          # 必须写「全限定」目标 package/pbr-lite/<包名>/compile。
+          # 只写 package/pbr-lite/compile 的话，中间那层目录没有 Makefile，
+          # make 会走 subdir.mk 的 compile -> install，等于把 SDK 默认配置里
+          # 所有包（几百个 kmod、curl、fail2ban…）全编一遍：实测多花 12 分钟，
+          # bin/ 里多出 200 多 MB 无关包。
+          make -j$(nproc) V=s \
+            package/pbr-lite/pbr-lite/compile \
+            package/pbr-lite/luci-app-pbr-lite/compile
 
       - name: 收集产物
         run: |
-          mkdir -p out
-          find "$SDK_DIR/bin" -type f \( -name "*.ipk" -o -name "*.apk" \) -exec cp -v {} out/ \;
+          cd "$SDK_DIR"
+          mkdir -p "$GITHUB_WORKSPACE/out"
+          # 只挑我们这两个包。bin/ 里可能有成百上千个别的包，不加名字过滤
+          # 会把整棵产物树都塞进 artifact（一次 200+ MB）。
+          find bin -type f \( -name '*.ipk' -o -name '*.apk' \) \
+              \( -name 'pbr-lite*' -o -name 'luci-app-pbr-lite*' \) \
+              -exec cp -v {} "$GITHUB_WORKSPACE/out/" \;
           echo "--- 产物 ---"
-          ls -lh out/
-          if [ -z "$(ls -A out)" ]; then
-            echo "::error::没有生成任何包"
-            exit 1
-          fi
+          ls -lh "$GITHUB_WORKSPACE/out/"
+          # 两个包都必须编出来，少一个就是编译链路有问题，别悄悄放过
+          for n in pbr-lite luci-app-pbr-lite; do
+            ls "$GITHUB_WORKSPACE/out/" | grep -q "^$n[_-]" || { echo "::error::缺少 $n 包"; exit 1; }
+          done
 
       - name: 上传 artifact
         uses: actions/upload-artifact@v4
