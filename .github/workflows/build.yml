@@ -1,0 +1,116 @@
+name: Build packages
+
+# 两个包都是 PKGARCH:=all（纯脚本 + 前端资源），产物与架构无关，
+# 所以用 x86/64 的 SDK 编出来的包可以直接装到 aarch64 路由器上。
+#
+# 同时出两种格式：
+#   ipk —— OpenWrt 24.10 及以前（opkg）
+#   apk —— OpenWrt 25.12 起（apk-tools，官方新格式）
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'pbr-lite/**'
+      - 'luci-app-pbr-lite/**'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    name: ${{ matrix.fmt }} (${{ matrix.sdk }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - fmt: ipk
+            sdk: "24.10.8"
+          - fmt: apk
+            sdk: "25.12.6"
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装解压依赖
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq zstd build-essential libncurses-dev
+
+      - name: 下载 OpenWrt SDK ${{ matrix.sdk }}
+        run: |
+          BASE="https://downloads.openwrt.org/releases/${{ matrix.sdk }}/targets/x86/64/"
+          FILE=$(curl -fsSL "$BASE" | grep -oE 'openwrt-sdk-[^"<]*Linux-x86_64\.tar\.(zst|gz)' | head -1)
+          if [ -z "$FILE" ]; then
+            echo "::error::在 $BASE 找不到 x86/64 SDK"
+            exit 1
+          fi
+          echo "下载 $FILE"
+          curl -fsSL -o sdk.tar "$BASE$FILE"
+          case "$FILE" in
+            *.zst) tar --zstd -xf sdk.tar ;;
+            *.gz)  tar -xzf sdk.tar ;;
+          esac
+          DIR=$(ls -d openwrt-sdk-* | head -1)
+          echo "SDK_DIR=$PWD/$DIR" >> "$GITHUB_ENV"
+          echo "解压到 $DIR"
+
+      - name: 放入本地包
+        run: |
+          cd "$SDK_DIR"
+          mkdir -p package/pbr-lite
+          cp -r "$GITHUB_WORKSPACE/pbr-lite"          package/pbr-lite/
+          cp -r "$GITHUB_WORKSPACE/luci-app-pbr-lite" package/pbr-lite/
+          # 确认 SDK 能发现两个 Makefile（package/*/*/Makefile 是支持的布局）
+          find package/pbr-lite -name Makefile -maxdepth 3
+
+      - name: 更新 feeds
+        run: |
+          cd "$SDK_DIR"
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: 选中目标包
+        run: |
+          cd "$SDK_DIR"
+          make defconfig
+          cat >> .config <<'EOF'
+          CONFIG_PACKAGE_pbr-lite=m
+          CONFIG_PACKAGE_luci-app-pbr-lite=m
+          EOF
+          make defconfig
+          echo "--- 确认已选中 ---"
+          grep -E 'CONFIG_PACKAGE_(pbr-lite|luci-app-pbr-lite)=' .config
+
+      - name: 编译
+        run: |
+          cd "$SDK_DIR"
+          # 单个包编失败要看完整日志，所以 V=s 且不并行最外层
+          make -j$(nproc) V=s package/pbr-lite/compile package/luci-app-pbr-lite/compile
+
+      - name: 收集产物
+        run: |
+          mkdir -p out
+          find "$SDK_DIR/bin" -type f \( -name "*.ipk" -o -name "*.apk" \) -exec cp -v {} out/ \;
+          echo "--- 产物 ---"
+          ls -lh out/
+          if [ -z "$(ls -A out)" ]; then
+            echo "::error::没有生成任何包"
+            exit 1
+          fi
+
+      - name: 上传 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pbr-lite-${{ matrix.fmt }}
+          path: out/*
+          if-no-files-found: error
+
+      - name: 附到 Release（仅 release 事件）
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
