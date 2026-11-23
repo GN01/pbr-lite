@@ -164,6 +164,20 @@ echo '17 4 * * * /usr/sbin/pbr-lite-update' >> /etc/crontabs/root
 | 规则源 | 列表地址、条目下限/漂移阈值、立即更新、备份回滚 |
 | 诊断 | 单个 IP 归属查询、include 头部、两条规则原文、日志尾巴、一键诊断包 |
 
+### 界面预览
+
+浅色主题下的真实截图（1440 宽，跑在 QWRT 25.12.3 / aarch64 上）。图片在 `docs/screenshots/`。
+
+**概览** —— 先用 `status` 渲染首屏，9 组自检异步补进来。计数那一栏底下那行灰字是
+flow offload 的提示：开了硬件加速之后被卸载的包不再经过 nft 规则链，命中数只会是残余量。
+
+![概览](docs/screenshots/01-overview.png)
+
+| | |
+|---|---|
+| **分流设置** —— 开关、生效地址、直连白名单、旁路由（MAC 可一键探测）<br>![分流设置](docs/screenshots/02-settings.png) | **高级设置** —— 打标值、路由表号、集合名；改动要手打 `CONFIRM`<br>![高级设置](docs/screenshots/03-advanced.png) |
+| **规则源** —— 列表地址、条目下限、漂移阈值、立即更新与回滚<br>![规则源](docs/screenshots/04-source.png) | **诊断** —— 输入 IP 看它该不该走代理、实际走了哪条路由<br>![诊断](docs/screenshots/05-diagnostics.png) |
+
 「高级设置」单独一页是有意的：那七八项正常用不到（默认值就是对的），混在日常开关里
 一是页面太长、二是改错代价大——打标值改错会让打标流量从主表出去，集合名改错会让旧集合残留。
 分开之后日常页只留「会经常碰」的东西，高级页的改动还会要求手打 `CONFIRM`。
@@ -259,6 +273,7 @@ tools/
   migrate-from-sdwan.sh       从早期 shell 变量版（/etc/sdwan.conf）迁移
 docs/
   architecture.md             设计取舍与踩过的坑
+  screenshots/                界面截图（README 预览用）
 ```
 
 ## 许可证
